@@ -474,12 +474,12 @@ program  greb_main
     if (log_exp == 208) period = 10000
     if (log_exp >= 205 .and. log_exp <= 208 ) then
        swmag0 =0.1
-       swmag = swmag0; SW_solar(33:48,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(33:48,:)
-       swmag = 0.75*swmag0; SW_solar(32,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(32,:)
-       swmag = 0.60*swmag0; SW_solar(31,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(31,:)
-       swmag = 0.50*swmag0; SW_solar(30,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(30,:)
-       swmag = 0.25*swmag0; SW_solar(29,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(29,:)
-       swmag = 0.10*swmag0; SW_solar(28,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(28,:)
+       swmag = swmag0; SW_solar(33:48,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(33:48,:)
+       swmag = 0.75*swmag0; SW_solar(32,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(32,:)
+       swmag = 0.60*swmag0; SW_solar(31,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(31,:)
+       swmag = 0.50*swmag0; SW_solar(30,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(30,:)
+       swmag = 0.25*swmag0; SW_solar(29,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(29,:)
+       swmag = 0.10*swmag0; SW_solar(28,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(28,:)
     end if
     
   end do
