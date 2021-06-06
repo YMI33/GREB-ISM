@@ -1,5 +1,5 @@
 !+++++++++++++++++++++++++++++++++++++++
-subroutine seaice_new(Tsurf, ice_H1, SW, LW_surf, LWair_down, Q_lat,  &
+subroutine seaice(Tsurf, ice_H1, SW, LW_surf, LWair_down, Q_lat,  &
 &                     Q_sens, dT_ocean, Q_sice, dice_h)
 !+++++++++++++++++++++++++++++++++++++++
 ! prognostic sea ice model
@@ -38,22 +38,21 @@ subroutine seaice_new(Tsurf, ice_H1, SW, LW_surf, LWair_down, Q_lat,  &
       ! the heat flux needed to melt whole ice column
       where(ice_H1 > 0.) hmax_melt  = ci_latent * rho_ice * ice_H1 / dt
   end where
+  ! equation (32) in XIE2021
   ! sea ice totally melts away
   where( (mask < 0) .and. (heat_tsurf >= 0 ) .and. (heat_tsurf >  hmax_melt) .and. (ice_H1 >0.))
-        dice_h      = - ice_H1
         Q_sice      = - hmax_melt 
   end where
   ! sea ice partially melts
   where( (mask < 0) .and. (heat_tsurf >= 0 ) .and. (heat_tsurf <= hmax_melt) .and. (ice_H1 >0.))
-        dice_h      = - dt*heat_tsurf / (rho_ice*ci_latent)
         Q_sice      = - heat_tsurf 
   end where
-
   ! sea ice forms 
   where( (mask < 0) .and. (heat_tsurf < 0 ) .and. (netheat < 0) .and. (ice_H1 < 0.5 ) )
-        dice_h      = - dt*netheat / (rho_ice*ci_latent)
         Q_sice      = - netheat
   end where
+  ! equation (31) in XIE2021
+  dice_h      = dt*Q_sice / (rho_ice*ci_latent)
 
   !----------------------------------------
   ! sea ice tendencies due to transport
@@ -77,7 +76,7 @@ subroutine seaice_new(Tsurf, ice_H1, SW, LW_surf, LWair_down, Q_lat,  &
      end do     
   end do
 
-end subroutine seaice_new
+end subroutine seaice
 
 !+++++++++++++++++++++++++++++++++++++++
 subroutine deep_ocean(Ts, To, dT_ocean, dTo)
@@ -138,6 +137,7 @@ subroutine sealevel(ice_h, Ts, To)
 10 format ('SSH: ',15F10.2) !TB
    ix =85; iy=9
 
+  ! equation (36) in XIE2021
   ogrid = 0.; ice_hl = 0.
   where(b_rock  <  -ice_h *rho_ice/rho_ocean) ogrid  = 1 
   where(b_rock  >= -ice_h *rho_ice/rho_ocean) ice_hl = ice_h 

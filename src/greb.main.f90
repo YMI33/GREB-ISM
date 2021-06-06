@@ -48,6 +48,9 @@
 !  log_exp = 301 paper exp:   10m icesheet
 !  log_exp = 302 paper exp: 1000m topo
 
+!  log_exp = 310 experiment: equalibrium experiment CO2= CO2_SCN (standalone)
+!  log_exp = 311 experiment: transition experiment forced by CO2 and orbital forcing [250kyr] (standalone)
+
 !  log_exp = 330 experiment: transition experiment forced by CO2 and orbital forcing [250kyr]
 !  log_exp = 331 experiment: Eemian scenario (CO2 267.1646, YEAR -127 000) 
 !  log_exp = 332 experiment: LGM scenario (CO2 189.6219, YEAR -24 000) 
@@ -237,7 +240,7 @@ module mo_diagnostics
 &                                          ftmn, fqmn, Tomn, ice_Hmn, ice_Tsmn
 
 ! declare output fields
-  real*4, dimension(xdim,ydim)          :: Tmm, Tamm, Tomm, qmm, icmm, prmm, evamm, qcrclmm, &
+  real*4, dimension(xdim,ydim)          :: Tmm, Tamm, Tomm, qmm, prmm, evamm, qcrclmm, &
 &                                          ice_Hm0, ice_Tsmm, term_massmm, term_hadvmm,    & 
 &								  	       term_calvmm, albdmn, xdum
   real*4, dimension(xdim,ydim,4)        :: ice_Tmm, ice_vxm0, ice_vym0
@@ -325,7 +328,7 @@ program  greb_main
   end where
           
   ! initialize the output variables
-  Tmm=0.; Tamm=0.;Tomm=0.; qmm=0.; icmm=0.; prmm=0.
+  Tmm=0.; Tamm=0.;Tomm=0.; qmm=0.; prmm=0.
   ice_Tsmm=0.; term_hadvmm=0.; term_massmm=0.; term_calvmm=0.
   ice_Tmm=0.; ice_Hm0=0.; albdmn=0.
 
@@ -422,7 +425,8 @@ program  greb_main
      ityr = mod((it-1),nstep_yr)+1           ! time step in year
      Ts1=Ts0; Ta1=Ta0; q1=q0; To1=To0
      ice_Ts1=ice_Ts0; ice_H1=ice_H0; ice_T1=ice_T0
-     call sealevel(ice_H0, Ts0, To0)
+     if( mod((it-1),nstep_yr)+1 == nstep_yr .and. (log_exp .ne. 310) .and. (log_exp .ne. 311)) &
+     &   call sealevel(ice_H0, Ts0, To0)
      print*, 'Do restart', year
   end if  
   
@@ -431,6 +435,20 @@ program  greb_main
   if (log_exp .eq. 200) call orbital_forcing(-(1000*kry_start+1)) ! EXP: PI-COTNTORL RUN
   if (log_exp .eq. 301) call orbital_forcing(-(1000*kry_start+1)) ! EXP: PI-COTNTORL RUN
   if (log_exp .eq. 302) call orbital_forcing(-(1000*kry_start+1)) ! EXP: PI-COTNTORL RUN
+  if( log_exp .eq. 310  ) then 
+      sw_solar = sw_solar_ctrl 
+      Ts1 = Tclim(:,:,ityr)
+  end if
+  if( log_exp .eq. 311  ) then 
+      sw_solar = sw_solar_ctrl 
+      if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (50,*) t, dT_g
+      if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (51,*) t, dT_a
+      Ts1(:,36:48) = Tclim(:,36:48,ityr) + dT_g
+      Ts1(:,1:12) = Tclim(:,1:12,ityr) + dT_a
+      do iy = 13,35
+          Ts1(:,iy) = Tclim(:,iy,ityr) + dT_a*(36-iy)/24.+dT_g*(iy-12)/24.
+      end do
+  end if
   if (log_exp .eq. 331) call orbital_forcing(1000*(1000-127)+1)
   if (log_exp .eq. 332) call orbital_forcing(1000*(1000-24)+1)
 
@@ -464,6 +482,20 @@ program  greb_main
      if (mod(it,nstep_yr) == 0 .and. log_exp == 200) call orbital_forcing(-(1000*kry_start+1))
      if (mod(it,nstep_yr) == 0 .and. log_exp == 301) call orbital_forcing(-(1000*kry_start+1))
      if (mod(it,nstep_yr) == 0 .and. log_exp == 302) call orbital_forcing(-(1000*kry_start+1))
+     if( log_exp .eq. 310  ) then 
+         sw_solar = sw_solar_ctrl 
+         Ts1 = Tclim(:,:,ityr)
+     end if
+     if( log_exp .eq. 311  ) then 
+         sw_solar = sw_solar_ctrl 
+         if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (50,*) t, dT_g
+         if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (51,*) t, dT_a
+         Ts1(:,36:48) = Tclim(:,36:48,ityr) + dT_g
+         Ts1(:,1:12) = Tclim(:,1:12,ityr) + dT_a
+         do iy = 13,35
+             Ts1(:,iy) = Tclim(:,iy,ityr) + dT_a*(36-iy)/24.+dT_g*(iy-12)/24.
+         end do
+     end if
      if (mod(it,nstep_yr) == 0 .and. log_exp == 331) call orbital_forcing((1000-127)*1000+1)
      if (mod(it,nstep_yr) == 0 .and. log_exp == 332) call orbital_forcing((1000-24)*1000+1)
 
@@ -576,8 +608,12 @@ print*,'% start climate shell'
    ! fix bed rock over ocean points
    where( mask < 0 ) b_rock0 = z_topo0
   
-
+   ! forcing data
    if(log_exp == 330 ) open(50,file='co2forcing') 
+   if(  log_exp .eq. 311) then
+      open(50,file='delta_ts_Greenland')
+      open(51,file='delta_ts_Antarctica')
+   end if
 
   ! start greb_model run
   print*,'ice ini: ',iceH_clim(86,46,1),iceH_clim(86,46,360),b_rock(86,46), z_topo(86,46), mask(86,46)
@@ -632,9 +668,20 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
   jday = mod((it-1)/ndt_days,ndays_yr)+1  ! current calendar day in year
   ityr = mod((it-1),nstep_yr)+1           ! time step in year
 
+  if(log_exp == 310 .or. log_exp == 311) then
+      Ta1  = Ts1 - c_lapse*z_topo
+      To1  = Toclim(:,:,ityr)
+      q1   = qclim(:,:,ityr)
+  endif
   call tendencies(CO2, Ts1, Ta1, To1, q1, ice_H1, SW, LW_surf, Q_lat,         &
 &                    Q_sens, Q_lat_air, dq_eva, dq_rain, dq_crcl,             &
 &                    dTa_crcl, dT_ocean, dTo, LWair_down, LWair_up, em, a_surf, Q_sice,dice_h)
+
+   if(log_exp == 310) then
+       dq_rain = -precipclim(:,:,ityr)/(3600*24*r_qviwv*wz_vapor) ! unit: kg/s
+   elseif(log_exp == 311) then
+       dq_rain = -precipclim(:,:,ityr)*(1+(Ts1-Tclim(:,:,ityr))/20)/(86400.*wz_vapor*r_qviwv) ! unit: kg/s
+   endif
 
   ! ice sheet : spread and ablation
   if(log_ice_sheet == 1) then
@@ -659,7 +706,7 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
 
   if(log_ice_cpl == 0) Q_ice = 0.0
 
-  ! surface temperature
+  ! equation (28) in XIE2021, surface temperature
   Ts0  = Ts1  +dT_ocean + dt*( SW +LW_surf -LWair_down +Q_lat +Q_ice +Q_sice +Q_sens   &
 &                              +TF_correct(:,:,ityr)) / cap_surf
 
@@ -684,6 +731,7 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
   q0 = q1 + dq
 
 !  ice height
+!  equation (7)/(30) in XIE2021
   ice_H0 = ice_H1 +dice_h +dice_mass +dice_hadv
   where (ice_H0 < 0.) ice_H0 = 0.0
   do k = 1,4
@@ -693,7 +741,8 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
       ice_H0(:,1:20)    = iceH_clim(:,1:20,ityr)
   end if
 
-  if( mod((it-1),nstep_yr)+1 == nstep_yr) call sealevel(ice_H0, Ts0, To0)
+  if( mod((it-1),nstep_yr)+1 == nstep_yr .and. (log_exp .ne. 310) .and. (log_exp .ne. 311)) &
+  &   call sealevel(ice_H0, Ts0, To0)
     
   ! write output
   call output(it, year, ionum, irec, mon, ts0, ta0, to0, q0, ice_cover, dq_rain, &
@@ -739,7 +788,7 @@ subroutine tendencies(CO2, Ts1, Ta1, To1, q1, ice_h1, SW, LW_surf, Q_lat, Q_sens
     call deep_ocean( Ts1, To1, dT_ocean, dTo)
 
     ! sea ice
-    call seaice_new(Ts1, ice_H1, SW, LW_surf, LWair_down, Q_lat, &
+    call seaice(Ts1, ice_H1, SW, LW_surf, LWair_down, Q_lat, &
                   Q_sens, dT_ocean, Q_sice, dice_h)
     
 !$omp section
@@ -811,6 +860,7 @@ end subroutine tendencies
 
     if(log_ice_cpl == 0) Q_ice = 0.0
 
+    ! equation (28) in XIE2021, surface temperature
     ! surface temperature without heat flux correction
     dTs = dt*( sw +LW_surf -LWair_down +Q_lat +Q_sens +Q_ice +Q_sice) / cap_surf
     Ts0  = Ts1 +dTs +dT_ocean
@@ -854,6 +904,7 @@ end subroutine tendencies
     q0 = q1 + dq +dq_crcl + qF_correct(:,:,ityr)
  
     ! ice height
+    !  equation (7)/(30) in XIE2021
     ice_h0 = ice_h1 +dice_h +dice_mass +dice_hadv
     where ( ice_h0 < 0. ) ice_h0 = 0.0
     do k = 1,4
@@ -863,7 +914,8 @@ end subroutine tendencies
         ice_H0(:,1:20)    = iceH_clim(:,1:20,ityr)
     end if
 
-    if( mod((it-1),nstep_yr)+1 == nstep_yr) call sealevel(ice_H0, Ts0, To0)
+    if( mod((it-1),nstep_yr)+1 == nstep_yr .and. (log_exp .ne. 310) .and. (log_exp .ne. 311)) &
+    &   call sealevel(ice_H0, Ts0, To0)
 
     ! diagnostics: annual means plots
     call diagonstics(it, 0, CO2_ctrl, ts0, ta0, to0, q0, ice_cover, sw, lw_surf, q_lat, q_sens)
@@ -885,7 +937,7 @@ subroutine diagonstics(it, year, CO2, ts0, ta0, to0, q0, ice_cover, sw, lw_surf,
 !    diagonstics plots
 
   USE mo_numerics,    ONLY: ndays_yr, xdim, ydim, ipx ,ipy, ndt_days, nstep_yr
-  USE mo_physics,     ONLY: ityr, TF_correct, qF_correct, cap_surf, Tclim
+  USE mo_physics,     ONLY: ityr, log_exp, TF_correct, qF_correct, cap_surf, Tclim
   use mo_diagnostics
 
 ! declare temporary fields 
@@ -904,7 +956,13 @@ subroutine diagonstics(it, year, CO2, ts0, ta0, to0, q0, ice_cover, sw, lw_surf,
      qlatmn  = qlatmn/nstep_yr; qsensmn = qsensmn/nstep_yr; ftmn = ftmn/nstep_yr;
      fqmn    = fqmn/nstep_yr;
      1000 format (I7.0, T8, F10.1, T20, F10.2, T37, F10.6, T52, F10.6, T67, F10.6, T85, F10.6) !TB
-     print 1000, year, CO2, gmean(swmn), gmean(tsmn)-273.15, tsmn(48,24)-273.15,tsmn(4,39)-273.15, tsmn(1,48)-273.15 !TB
+     1001 format (I7.0, T8, F10.1, T20, F10.3, T37, F10.3, T52, F10.3, T67, F10.3, T85, F10.3) !TB
+     if(log_exp .ne. 310 .and. log_exp .ne. 311) then
+         print 1000, year, CO2, gmean(swmn), gmean(tsmn)-273.15, tsmn(48,24)-273.15,tsmn(4,39)-273.15, tsmn(1,48)-273.15 !TB
+     else
+         print 1001, year, Ts0(65,43),ice_cover(65,43),ice_cover(33,43),ice_cover(25,33),ice_cover(86,43),ice_cover(33,1) !TB
+     endif
+
      tsmn=0.; tamn=0.; qmn=0.; swmn=0.;        ! reset annual mean values
      lwmn=0.; qlatmn=0.; qsensmn=0.; ftmn=0.; fqmn=0.;  ! reset annual mean values
   end if
@@ -1024,7 +1082,7 @@ subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, ice_cover, dq_r
   USE mo_physics,      ONLY: jday, r_qviwv, wz_vapor, iyear, glacier_type, mask, z_topo, ssh
   use mo_diagnostics,  ONLY: ice_Tsmm, ice_Tsmn_ctrl, ice_Hmn_ctrl, ice_mask_ctrl &
                            , Tmn_ctrl, Tamn_ctrl, Tomn_ctrl, qmn_ctrl, prmn_ctrl &
-                           , Tmm, Tamm, Tomm, qmm, icmm, prmm, albdmn & 
+                           , Tmm, Tamm, Tomm, qmm, prmm, albdmn & 
                            , term_massmm, term_mass_ctrl, term_hadvmm, term_hadv_ctrl & 
                            , term_calvmm, term_calv_ctrl, ice_vxm0, ice_vym0, ice_Tmm, ice_Hm0
   implicit none
@@ -1044,7 +1102,7 @@ subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, ice_cover, dq_r
 
   ! diagnostics: monthly means
   Tmm=Tmm+Ts0; Tamm=Tamm+ta0; Tomm=Tomm+to0; qmm=qmm+q0; 
-  icmm=icmm+ice_cover; albdmn=albdmn+a_surf
+  albdmn=albdmn+a_surf
   prmm=prmm+dq_rain*(r_qviwv*wz_vapor);          ! kg/m2/s
   ice_Tsmm = ice_Tsmm+ice_Ts0
   ice_Hm0=ice_H0;ice_Tmm = ice_Tmm+ice_T0 
@@ -1080,7 +1138,7 @@ subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, ice_cover, dq_r
          end do
          irec=irec+1; ! set in outside loop
      end if
-     Tmm=0.; Tamm=0.;Tomm=0.; qmm=0.; icmm=0.; prmm=0.
+     Tmm=0.; Tamm=0.;Tomm=0.; qmm=0.; prmm=0.
      ice_Tsmm=0.; term_massmm=0.; term_hadvmm=0.; term_calvmm=0.
      ice_Tmm=0.; ice_Hm0=0.; albdmn=0.
      mon=mon+1; if (mon==13) mon=1 ! set in outside loop
@@ -1117,12 +1175,12 @@ subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, ice_cover, dq_r
               write(103,rec=ngvar*irec+2) real(gmean(Tamm/ndm), kind=4)
               write(103,rec=ngvar*irec+3) real(gmean(Tomm/ndm) , kind=4)
               write(103,rec=ngvar*irec+4) real(gmean(qmm/ndm), kind=4)
-              write(103,rec=ngvar*irec+5) real(gmean(icmm/ndm), kind=4)
+              write(103,rec=ngvar*irec+5) real(gmean(albdmn/ndm), kind=4)
               write(103,rec=ngvar*irec+6) real(gmean(prmm/ndm), kind=4)
               write(103,rec=ngvar*irec+7) real(ssh, kind=4) 
               irec=irec+1; ! set in outside loop
           end if
-          Tmm=0.; Tamm=0.;Tomm=0.; qmm=0.; icmm=0.; prmm=0.
+          Tmm=0.; Tamm=0.;Tomm=0.; qmm=0.; prmm=0.
           ice_Tsmm=0.; term_hadvmm=0.; term_massmm=0.; term_calvmm=0.
           ice_Tmm=0.; ice_Hm0=0.; albdmn=0.
           mon=mon+1; if (mon==13) mon=1 ! set in outside loop

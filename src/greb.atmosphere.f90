@@ -14,7 +14,7 @@ subroutine SWradiation(Tsurf, sw, ice_cover, a_surf)
   real*8, dimension(xdim,ydim)  :: ice_cover
 
 ! atmos albedo
-  a_atmos=cldclim(:,:,ityr)*a_cloud
+   a_atmos=cldclim(:,:,ityr)*a_cloud
 
 ! surface albedo
    a_surf = a_no_ice          											 ! no ice
@@ -24,7 +24,7 @@ subroutine SWradiation(Tsurf, sw, ice_cover, a_surf)
      ! Land:  ice -> albedo linear function of T_surf
    	 where(mask > 0. .and. Tsurf <= Tl_ice1) a_surf = a_no_ice+da_ice   ! ice
    	 where(mask > 0. .and. Tsurf > Tl_ice1 .and. Tsurf < Tl_ice2 ) &
-&         a_surf = a_no_ice +da_ice*(1-(Tsurf-Tl_ice1)/(Tl_ice2-Tl_ice1))
+&       a_surf = a_no_ice +da_ice*(1-(Tsurf-Tl_ice1)/(Tl_ice2-Tl_ice1))
 
     ! Ocean: ice -> albedo/heat capacity linear function of T_surf
      where(mask < 0. .and. Tsurf <= To_ice1) a_surf = a_no_ice+da_ice      ! ice
@@ -43,10 +43,11 @@ subroutine SWradiation(Tsurf, sw, ice_cover, a_surf)
      where(mask > 0. .and. ice_cover > 0. .and. ice_cover < 0.02 ) &
 &       a_surf =  a_no_ice +da_ice*ice_cover/0.02
 
+     ! equation (33) in XIE2021
      ! Ocean: ice -> albedo/heat capacity linear function of T_surf
      where(mask < 0. .and. ice_cover >= 0.5) a_surf = a_no_ice+da_ice      ! ice
      where(mask < 0. .and. ice_cover  > 0.0 .and. ice_cover < 0.5 ) &
-&          a_surf = a_no_ice + da_ice*ice_cover/0.5
+&       a_surf = a_no_ice + da_ice*ice_cover/0.5
      
   end if 
  
@@ -178,6 +179,7 @@ subroutine hydro(Tsurf, q, Qlat, Qlat_air, dq_eva, dq_rain, ice_H1)
   do i=1,7; q_zonal(:,i) = sum(q_zonal(1,i:8))/(8-i+1); end do ! smooth antarctica to s-ocean
   do i=ydim-6,ydim; q_zonal(:,i) = sum(q_zonal(1,ydim-7:i))/(8-(ydim-i)); end do ! smooth n-pole
 
+  ! equation (29) in XIE2021
   dq_rain = dq_rain + q_zonal*precip_correct(:,:,ityr)
 
 ! latent heat flux atmos

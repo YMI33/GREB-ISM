@@ -85,6 +85,7 @@ subroutine ice_sheet(it, ionum, irec, mon, ice_H1, ice_T1, ice_Ts1, Ta1, dT_ocea
   dx = dlon; dy=dlat; dyy=dy*deg
   lat = dlat*ilat-dlat/2.-90.;  dxlat=dx*deg*cos(2.*pi/360.*lat)
 
+  ! equation (34) in XIE2021
   ice_zs = 0.
   if(log_ice_topo .eq. 1) then
       where(glacier_type >  0) ice_zs = b_rock + ice_H1
@@ -102,8 +103,8 @@ subroutine ice_sheet(it, ionum, irec, mon, ice_H1, ice_T1, ice_Ts1, Ta1, dT_ocea
 &      .and. it/float(ndt_days) == nint(it/float(ndt_days)) ) then
       dvxdz = 0.; dvydz = 0.; sigma_x = 0.; sigma_y = 0.
       ! ice temperature profile estimate, vertical diffusion and pressure-based melting point
-      ice_T1(:,:,4) = ice_Tsm/nstep_yr
-      ice_Tmtb = Tl_ice2 - beta_melt*ice_H1
+      ice_T1(:,:,4) = ice_Tsm/nstep_yr ! equation (26) in XIE2021
+      ice_Tmtb = Tl_ice2 - beta_melt*ice_H1 
       do j = 1,xdim
          do i = 1,ydim
             call ice_regression_coef(ice_T1(j,i,:), ice_Tcoef(j,i,:))
@@ -134,6 +135,7 @@ subroutine ice_sheet(it, ionum, irec, mon, ice_H1, ice_T1, ice_Ts1, Ta1, dT_ocea
           call ice_advection_upwind(ice_vx, ice_vy, thk_layer, thk_layer, term_advx, term_advy, &
           &                         dyy, dxlat, lat, ice_H1)
           thk_adv = - (term_advx + term_advy)
+          ! equation (18) in sigma-coordinate form in XIE2021
           ice_vz(:,:,k) = (divg(:,:,k) - thk_adv)/dt_ice
           if(k > 1) ice_vzg(:,:,k) = (ice_vz(:,:,k-1)+ice_vz(:,:,k))/2.
           
@@ -172,7 +174,7 @@ subroutine ice_sheet(it, ionum, irec, mon, ice_H1, ice_T1, ice_Ts1, Ta1, dT_ocea
 
   ice_Ts0 = ice_Ts1
   
-  ! ice temperature equation
+  ! equation (25) in XIE2021, ice temperature equation
   dice_T = term_tadv + term_dif + term_sig 
   do k = 1,4
       ice_Tmt(:,:,k) = Tl_ice2 - beta_melt*(1-zeta(k))*ice_H1/2.
@@ -212,7 +214,7 @@ subroutine ice_mass_balance(ice_H1, ice_Ts1, Ta1, dq_rain, Fn_surf, dT_ocean, di
   real*8, dimension(xdim,ydim) :: term_mass               ! ice thickness tendency due to mass balance [m] 
 
   dice_Ts = 0.; term_mass = 0.
-  Ta_scl = Ta1 + c_lapse*z_topo
+  Ta_scl = Ta1 + c_lapse*z_topo  ! equation (35) in XIE2021
   ! ice accumulation, thickness increase by snowfall
   call ice_accumulation(ice_snf, ice_Ts1, Ta_scl, dq_rain) 
   ! ice fusion
@@ -244,9 +246,9 @@ subroutine ice_accumulation(ice_snf, ice_Ts1, Ta1, dq_rain)
   ! snowfall rate
   T_range = 2.
   where(ice_Ts1 - Tl_ice2 <= -T_range) snf_rate = 1.
-  ! partial snowfall drop when temperature between -2 to 2 ˚C
+  ! equation (9) in XIE2021, partial snowfall drop when temperature between -2 to 2 ˚C
   where(abs(ice_Ts1- Tl_ice2) < T_range) snf_rate = (-(ice_Ts1-Tl_ice2)/T_range+1)/2.
-  ! ice sheet accumulation from snowfall, kg/m2/s   
+  ! equation (8) in XIE2021, ice sheet accumulation from snowfall, kg/m2/s   
   where((snf_rate > 0.) .and. (Ta1 <= Tl_ice2)) ice_snf = - snf_rate*ice_svlm*dq_rain*r_qviwv*wz_vapor; 
 end subroutine ice_accumulation
 
@@ -276,25 +278,26 @@ subroutine ice_fusion( ice_fus, ice_melt, ice_Ts1, ice_H1, Fn_surf, dT_ocean)
 !  where((ice_H1 <  d_ice_max).and.(ice_H1 > 0.)) cap_ice = ice_H1*cp_ice*rho_ice ! heat capacity of snow [J/K/m^2]
 !  where(ice_H1 >= d_ice_max) cap_ice = d_ice_max*cp_ice*rho_ice ! heat capacity limitation of snow [J/K/m^2]
   
+   ! equation (13) in XIE2021
    ice_Tse  = ice_Ts1 + dT_ocean + dt*Fn_surf / cap_surf 
+   ! equation (11) in XIE2021
    where( mask > 0 .and. ice_H1 > 0.)
-       ! the extra heat flux after the ice reaches melting point
+       ! equation (12) in XIE2021, the extra heat flux after the ice reaches melting point
        heat_tsurf = (ice_Tse - Tl_ice2) * cap_surf / dt
        ! the heat flux needed to melt whole ice column
        hmax_melt  = ci_latent * rho_ice * ice_H1 / dt
    end where
    ! surface snow totally melts away
    where( (mask > 0) .and. (heat_tsurf > 0 ) .and. (heat_tsurf >  hmax_melt) .and. (ice_H1 >0.))
-         ice_melt    = - ice_H1 / dt
          ice_fus     = - hmax_melt 
    end where
    ! surface snow partially melts
    where( (mask > 0) .and. (heat_tsurf > 0 ) .and. (heat_tsurf <= hmax_melt) .and. (ice_H1 >0.))
-         ice_melt    = - heat_tsurf / (rho_ice*ci_latent)
          ice_fus     = - heat_tsurf 
    end where
 
-  where(ice_fus > 0.) ice_fus = 0.
+   where(ice_fus > 0.) ice_fus = 0.
+   ice_melt = ice_fus / (rho_ice*ci_latent) ! equation (10) in XIE2021
 
 end subroutine ice_fusion
 
@@ -516,14 +519,16 @@ subroutine ice_sheet_diagnostics(ice_zs,ice_H1,ice_Tcoef, dyy, dxlat, ice_vx, ic
           dZ = (iceZ_c - iceZ_im1)
           dZdy = dZ/dyy
          
-          ! basal velcocity according to ice
+          ! equation (22) in XIE2021, basal velcocity according to ice
           delh = (sighrz+sighrzim)/(2*rho_ice*grav)
           vyb = - slid_law*dZdy*max(iceH_c, iceH_im1)*delh**2
           delh = (sighrz+sighrzjm)/(2*rho_ice*grav)
           vxb = - slid_law*dZdx*max(iceH_c, iceH_jm1)*delh**2
 
+          ! equation (14) in XIE2021
           ice_vx(j,i)   = -2.*rho_ice*grav*dZdx*(cons_int3+cons_intjm3)/2. + vxb
           ice_vy(j,i)   = -2.*rho_ice*grav*dZdy*(cons_int3+cons_intim3)/2. + vyb
+          ! equation (15) in XIE2021
           ice_vxm(j,i)  = -2.*rho_ice*grav*dZdx*(cons_int4+cons_intjm4)/2. + vxb
           ice_vym(j,i)  = -2.*rho_ice*grav*dZdy*(cons_int4+cons_intim4)/2. + vyb
 
@@ -550,7 +555,9 @@ subroutine ice_sheet_diagnostics(ice_zs,ice_H1,ice_Tcoef, dyy, dxlat, ice_vx, ic
        real*8               :: T_prime
        real*8               :: T_melt
        real*8               :: c
+       ! equation (20) in XIE2021
        T_prime = T_Gauss - T_melt + Tl_ice2
+       ! equation (19) in XIE2021
        if(T_prime > ice_Tcons) then
            constitutive_equation =  A_fact(1)*exp(-actene(1)/R_gas/T_prime)*enh_fact
        else
@@ -729,7 +736,7 @@ subroutine ice_velocity_ssa(ice_zs,ice_H1, dyy, dxlat, ice_vx, ice_vy, ice_vxm, 
               termZx         = rho_ice*grav*(iceH_c+iceH_jm1)*(iceZ_c-iceZ_jm1)/(2*dxlat(i)*vis_c)
               termZy         = rho_ice*grav*(iceH_c+iceH_im1)*(iceZ_c-iceZ_im1)/(2*dyy*vis_c)
     
-              ! Gauss–Seidel method for linear system solution
+              ! equation (16)/(17) in XIE2021, Gauss–Seidel method for linear system solution
               if(glc_c == 0 .and. glc_jm1 == 0 ) then
                   vx_ssa(j,i) = (4*ddx2(i)*(vx_jp1*iceH_c + vx_jm1*iceH_jm1)         &
                   &           + ddy2      *(vx_ip1*iceH_jmhiph + vx_im1*iceH_jmhimh) &
@@ -747,7 +754,7 @@ subroutine ice_velocity_ssa(ice_zs,ice_H1, dyy, dxlat, ice_vx, ice_vy, ice_vxm, 
                   &           / (4*ddy2   *(iceH_c+iceH_im1)+ddx2(i)*(iceH_jphimh+iceH_jmhimh))
               end if
               
-!              ! boundary condition  
+              ! equation (23)/(24) in XIE2021, boundary condition  
               termZx         = rho_ice*grav*max(iceH_c,iceH_jm1)/vis_c/2
               termZx         = sign(termZx, iceZ_c-iceZ_jm1)
               termZy         = rho_ice*grav*max(iceH_c,iceH_im1)/vis_c/2
@@ -886,7 +893,7 @@ subroutine ice_temperature_convection_diffusion(T_ini, H1_ini, w_layer,  w, zeta
       coefp1(k) = -(kdtdx(k)/dzeta(k+1)-dt/dzeta(k+1)*wp1)*(2./H1_ini)
       coefct(k) = 1 + (kdtdx(k)/dzeta(k+1) - dt*wp1/dzeta(k+1))*(2./H1_ini) 
       coefm1(k) = 0. 
-      coef_f(k) = ice_T1(k) + (kdtdx(k)+dt*wm1)*geoh_flux/ice_kappa 
+      coef_f(k) = ice_T1(k) + (kdtdx(k)+dt*wm1)*geoh_flux/ice_kappa ! equation (27) in XIE2021
 
       ! boundary condition II
       !coefp1(k) = -(kdtdx(k)*(1./dzeta(k+1)+1./dzeta(k)) - dt*(wp1/dzeta(k+1)-wm1/dzeta(k)))*(2./H1_ini)
