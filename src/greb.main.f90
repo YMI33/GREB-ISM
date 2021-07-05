@@ -475,7 +475,7 @@ program  greb_main
      call restart_write(it, year, yrs_calc, ts1, ta1, to1, q1, ice_Ts1, ice_H1, ice_T1)
 
      CO2=CO2_SCN
-     if(log_exp == 330 .and. mod(year,100) .eq. 1 .and. ityr .eq. 1) read(50,*) t,CO2_SCN
+     if(log_exp == 330 .and. mod(year,100) .eq. 1 .and. ityr .eq. 1) read(53,*) t,CO2_SCN
      if(log_exp == 331) CO2_SCN=267.1646
      if(log_exp == 332) CO2_SCN=189.6219
 
@@ -514,12 +514,12 @@ program  greb_main
     if (log_exp >= 205 .and. log_exp <= 208 ) then
        sw_solar = sw_solar_ctrl 
        swmag0 =0.1
-       swmag = swmag0; SW_solar(33:48,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(33:48,:)
-       swmag = 0.75*swmag0; SW_solar(32,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(32,:)
-       swmag = 0.60*swmag0; SW_solar(31,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(31,:)
-       swmag = 0.50*swmag0; SW_solar(30,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(30,:)
-       swmag = 0.25*swmag0; SW_solar(29,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(29,:)
-       swmag = 0.10*swmag0; SW_solar(28,:) = (1-swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(28,:)
+       swmag = swmag0; SW_solar(33:48,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(33:48,:)
+       swmag = 0.75*swmag0; SW_solar(32,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(32,:)
+       swmag = 0.60*swmag0; SW_solar(31,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(31,:)
+       swmag = 0.50*swmag0; SW_solar(30,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(30,:)
+       swmag = 0.25*swmag0; SW_solar(29,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(29,:)
+       swmag = 0.10*swmag0; SW_solar(28,:) = (1+swmag*(sin(2*3.14*year/period)))*sw_solar_ctrl(28,:)
     end if
     
   end do
