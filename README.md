@@ -20,6 +20,6 @@ Code for Globally Resolved Energy Balance - Ice Sheet Model (GREB-ISM)
 2. change environment variable **WDIR** to the absolute path of your GREB-ISM 
 3. change experiment setting (EXP:experiment number, KYRSTART:start date of experiment, etc.)
 4. run job script
-5. you can access the experiment output in *GREB-ISM/experiment*, which are binary files in [GrADS format](http://cola.gmu.edu/grads/gadoc/gadocindex.htmli). You can easily read the data by CTL files in the same directory through GrADS. 
+5. you can access the experiment output in *GREB-ISM/experiment*, which are binary files in [GrADS format](http://cola.gmu.edu/grads/gadoc/aboutgriddeddata.html#structure). You can easily read the data by CTL files in the same directory through GrADS. 
 
 
