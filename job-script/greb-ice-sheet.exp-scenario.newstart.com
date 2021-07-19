@@ -205,8 +205,8 @@ dset ^${BASE}.control.bin
 undef 9.e27
 xdef  96 linear 0 3.75
 ydef  48 linear -88.125 3.75
-zdef   1 linear 1 1
-tdef $TDIM linear 15jan0  1mo
+zdef   4 levels 1 0.57 -0.57 -1
+tdef $TDIM linear 15jan0001  1mo
 vars 16
 tsurf  1 0 surface temperature
 tatmos 1 0 atmosphere temperature
@@ -234,7 +234,7 @@ options template
 undef 9.e27
 xdef  96 linear 0 3.75
 ydef  48 linear -88.125 3.75
-zdef   1 linear 1 1
+zdef   4 levels 1 0.57 -0.57 -1
 tdef 12000 linear 15jan0001 1mo
 vars 16
 tsurf  1 0 surface temperature

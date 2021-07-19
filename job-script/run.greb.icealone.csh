@@ -217,7 +217,7 @@ dset ^${BASE}.control.bin
 undef 9.e27
 xdef  96 linear 0 3.75
 ydef  48 linear -88.125 3.75
-zdef   1 linear 1 1
+zdef   4 levels 1 0.57 -0.57 -1
 tdef $TDIM linear 15jan0000 1mo
 vars 16
 tsurf  1 0 surface temperature
@@ -245,7 +245,7 @@ dset ^${BASE}.scenario.bin
 undef 9.e27
 xdef  96 linear 0 3.75
 ydef  48 linear -88.125 3.75
-zdef   1 linear 1 1
+zdef   4 levels 1 0.57 -0.57 -1
 tdef $TDIM linear 15jan0000 1mo
 vars 16
 tsurf  1 0 surface temperature
@@ -296,7 +296,7 @@ undef 9.e27
 options template
 xdef  96 linear 0 3.75
 ydef  48 linear -88.125 3.75
-zdef   1 linear 1 1
+zdef  4  levels 1 0.57 -0.57 -1
 tdef $TDIM linear 15jan0001 1mo
 vars 16
 tsurf  1 0 surface temperature
@@ -402,8 +402,8 @@ dset ^${BASE}.scenario.bin
 undef 9.e27
 xdef  96 linear 0 3.75
 ydef  48 linear -88.125 3.75
-zdef   1 linear 1 1
-tdef $TDIM linear 15jan0  1mo
+zdef   4 levels 1 0.57 -0.57 -1
+tdef $TDIM linear 15jan0001 1mo
 vars 16
 tsurf  1 0 surface temperature
 tatmos 1 0 atmosphere temperature
@@ -429,7 +429,7 @@ dset ^${BASE}.scenario.gmean.bin
 undef 9.e27
 xdef  1 linear 0 3.75
 ydef  1 linear -88.125 3.75
-zdef  1 linear 1 1
+zdef   4 levels 1 0.57 -0.57 -1
 tdef  $TDIM linear 15jan0001 1mo
 vars 7 
 tsurf  1 0 surface temperature
