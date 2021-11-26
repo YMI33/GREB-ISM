@@ -626,7 +626,7 @@ print*,'% start climate shell'
       do n=1,nstep_yr
           read(55,rec=n) Tclim_lgm(:,:,n)
           read(56,rec=n) pclim_lgm(:,:,n)
-          pclim(:,:,n) = precipclim(:,:,n)*exp(7.5e-4*z_topo)/86400.
+          pclim(:,:,n) = precipclim(:,:,n)/86400.
       end do
    end if
 
@@ -697,7 +697,6 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
    elseif(log_exp == 311) then
        pmon    = pclim(:,:,ityr) + (pclim_lgm(:,:,ityr)-pclim(:,:,ityr))*(dT_g-ind_pre)/(ind_lgm-ind_pre)
        where(pmon < 0) pmon = 0.
-       pmon    = pmon*exp(-7.5e-4*z_topo)
        dq_rain = -pmon/(wz_vapor*r_qviwv) ! unit: kg/s
    endif
 
