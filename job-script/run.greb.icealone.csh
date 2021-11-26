@@ -106,6 +106,8 @@ set BROCK=${IDIR}'/bedmachine.bed.rock.bin'
 set ICCLM=${IDIR}'/ice.height.first-guess.clim730.bin'
 set ORBIT=${IDIR}'/orbital.parameters.last5mill.yrs.nocomments.txt'
 set PRECI=${IDIR}'/precip.NCEP-DOE.730clim.gad'
+set LGM_PRECI=${IDIR}'/precip.AWI-ESM_LGM.730clim.gad'
+set LGM_TCLIM=${IDIR}'/ts.AWI-ESM_LGM.730clim.gad'
 
 set TS_G='nodts_greenland'
 set TS_A='nodts_antarctica'
@@ -114,8 +116,8 @@ touch nodts_antarctica
 if ( $EXP == 311 ) set TS_G=${IDIR}'/icesheet_input/grip_temp_nosmooth_250kyr.dat'
 if ( $EXP == 311 ) set TS_A=${IDIR}'/icesheet_input/vostok_temp_nosmooth_250kyr.dat'
 
-rm -f tclim ztopo qclim moist solar uwind vwind mldclim cloud orbit toclim abswind
-rm -f omclim omstdv iceclm bedrock test.gad precip delta_ts_Greenland delta_ts_Antarctica
+rm -f tclim ztopo qclim moist solar uwind vwind mldclim cloud orbit toclim abswind lgm_precip lgm_tsurf
+rm -f omclim omstdv iceclm bedrock precip delta_ts_Greenland delta_ts_Antarctica
 
 ln -s $TCLIM tclim
 ln -s $MASK  ztopo
@@ -136,6 +138,8 @@ ln -s $ORBIT orbit
 ln -s $PRECI precip
 ln -s $TS_G delta_ts_Greenland
 ln -s $TS_A delta_ts_Antarctica
+ln -s $LGM_PRECI lgm_precip
+ln -s $LGM_TCLIM lgm_tsurf
 
 
 rm -f ToF_correct qF_correct TF_correct

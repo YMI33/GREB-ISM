@@ -99,9 +99,9 @@ subroutine ice_sheet(it, ionum, irec, mon, ice_H1, ice_T1, ice_Ts1, Ta1, dT_ocea
   term_tadv = 0.; term_dif  = 0.; term_sig  = 0.; dice_T  = 0.; term_vadv = 0.
   ice_Tsm = ice_Tsm + ice_Ts1
 !+++++++++++++++++++++++++++++ dynamic core  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  if ( jday == sum(jday_mon) .and. log_ice_dyn == 1 &
-&      .and. it/float(ndt_days) == nint(it/float(ndt_days)) ) then
+  if ( ityr == 730 .and. log_ice_dyn == 1 ) then
       dvxdz = 0.; dvydz = 0.; sigma_x = 0.; sigma_y = 0.
+      ice_vz = 0.; ice_vzg = 0.
       ! ice temperature profile estimate, vertical diffusion and pressure-based melting point
       ice_T1(:,:,4) = ice_Tsm/nstep_yr ! equation (26) in XIE2021
       ice_Tmtb = Tl_ice2 - beta_melt*ice_H1 
@@ -1174,7 +1174,7 @@ subroutine flux_operator(ice_Hx, ice_Hy, crantx, cranty, fu, fv)
               yl = 0; yr = -crant_fray
           end if
          
-          if ((adv_ind>ydim-2).or.(adv_ind<2)) then
+          if ((adv_ind>ydim-2).or.(adv_ind<=2)) then
               call meridion_shift(ice_Hy, j, adv_ind-2, iceH_indm2)
               call meridion_shift(ice_Hy, j, adv_ind-1, iceH_indm1)
               call meridion_shift(ice_Hy, j, adv_ind  , iceH_ind  )

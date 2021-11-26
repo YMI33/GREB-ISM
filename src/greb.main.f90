@@ -186,6 +186,12 @@ module mo_physics
   integer  :: kry_end   = 0                        ! end year in [kyr] has to be <=0  
   integer  :: dtyr_acc  = 1                        ! acceleration in sw_solar forcing 
 
+  
+ ! index for paleoclimate simulation
+  real     ::  ind_lgm    = -13.99                  ! LGM temperature index (-21 ka)
+  real     ::  ind_pre    = -0.89                   ! today temperature index (0 ka)
+  real     ::  dT_g                                 ! Greenland temperature difference in paleoclimate
+  real     ::  dT_a                                 ! Antarctica temperature difference in paleoclimate
   ! physical paramter (rainfall)
   real :: c_q, c_rq, c_omega, c_omegastd
 
@@ -202,6 +208,7 @@ module mo_physics
   real*4, dimension(xdim,ydim,nstep_yr) ::  iceH_clim0   ! reference ice thickness climatology (input initial data) [m]
   real*4, dimension(xdim,ydim,nstep_yr) ::  Tclim, uclim, vclim, omegaclim, omegastdclim, wsclim
   real*4, dimension(xdim,ydim,nstep_yr) ::  qclim, mldclim, Toclim, cldclim, precipclim,iceH_clim    
+  real*4, dimension(xdim,ydim,nstep_yr) ::  Tclim_lgm, pclim, pclim_lgm 
   real*4, dimension(xdim,ydim,nstep_yr) ::  TF_correct, qF_correct, ToF_correct, precip_correct
   real*4, dimension(xdim,ydim,nstep_yr) ::  swetclim, dTrad
   real*4, dimension(ydim,nstep_yr)      ::  sw_solar, sw_solar_ctrl, sw_solar_scnr
@@ -450,11 +457,7 @@ program  greb_main
       sw_solar = sw_solar_ctrl 
       if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (53,*) t, dT_g
       if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (54,*) t, dT_a
-      Ts1(:,36:48) = Tclim(:,36:48,ityr) + dT_g
-      Ts1(:,1:12) = Tclim(:,1:12,ityr) + dT_a
-      do iy = 13,35
-          Ts1(:,iy) = Tclim(:,iy,ityr) + dT_a*(36-iy)/24.+dT_g*(iy-12)/24.
-      end do
+      Ts1 = Tclim(:,:,ityr) + (Tclim_lgm(:,:,ityr) - Tclim(:,:,ityr))*(dT_g-ind_pre)/(ind_lgm-ind_pre)
   end if
   if (log_exp .eq. 331) call orbital_forcing(1000*(1000-127)+1)
   if (log_exp .eq. 332) call orbital_forcing(1000*(1000-24)+1)
@@ -497,11 +500,7 @@ program  greb_main
          sw_solar = sw_solar_ctrl 
          if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (53,*) t, dT_g
          if(mod(year,100) .eq. 1 .and. ityr .eq. 1) read (54,*) t, dT_a
-         Ts1(:,36:48) = Tclim(:,36:48,ityr) + dT_g
-         Ts1(:,1:12) = Tclim(:,1:12,ityr) + dT_a
-         do iy = 13,35
-             Ts1(:,iy) = Tclim(:,iy,ityr) + dT_a*(36-iy)/24.+dT_g*(iy-12)/24.
-         end do
+         Ts1 = Tclim(:,:,ityr) + (Tclim_lgm(:,:,ityr) - Tclim(:,:,ityr))*(dT_g-ind_pre)/(ind_lgm-ind_pre)
      end if
      if (mod(it,nstep_yr) == 0 .and. log_exp == 331) call orbital_forcing((1000-127)*1000+1)
      if (mod(it,nstep_yr) == 0 .and. log_exp == 332) call orbital_forcing((1000-24)*1000+1)
@@ -621,6 +620,14 @@ print*,'% start climate shell'
    if(  log_exp .eq. 311) then
       open(53,file='delta_ts_Greenland')
       open(54,file='delta_ts_Antarctica')
+      open(55,file='lgm_tsurf' , ACCESS='DIRECT',FORM='UNFORMATTED', RECL=ireal*xdim*ydim)
+      open(56,file='lgm_precip', ACCESS='DIRECT',FORM='UNFORMATTED', RECL=ireal*xdim*ydim)
+
+      do n=1,nstep_yr
+          read(55,rec=n) Tclim_lgm(:,:,n)
+          read(56,rec=n) pclim_lgm(:,:,n)
+          pclim(:,:,n) = precipclim(:,:,n)*exp(7.5e-4*z_topo)/86400.
+      end do
    end if
 
   ! start greb_model run
@@ -664,7 +671,7 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
 &                                 ice_cover, Q_sens, Q_lat, Q_lat_air, dq_eva,   &
 &                                 dq_rain, dTa_crcl, dq_crcl, dq, dT_ocean, dTo, &
 &                                 LW_surf, LWair_down, LWair_up, em,             &
-&                                 a_surf, Q_ice, Q_sice            
+&                                 a_surf, Q_ice, Q_sice, pmon            
   real*8, dimension(xdim,ydim) :: ice_H0,  ice_Ts0, Fn_surf, ice_H1, ice_Ts1,    & 
 &                                 dice_hadv, dice_mass, term_calv, dice_h
   real*8, dimension(xdim,ydim,4) :: ice_T1, ice_T0
@@ -688,7 +695,10 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
    if(log_exp == 310) then
        dq_rain = -precipclim(:,:,ityr)/(3600*24*r_qviwv*wz_vapor) ! unit: kg/s
    elseif(log_exp == 311) then
-       dq_rain = -precipclim(:,:,ityr)*(1+(Ts1-Tclim(:,:,ityr))/20)/(86400.*wz_vapor*r_qviwv) ! unit: kg/s
+       pmon    = pclim(:,:,ityr) + (pclim_lgm(:,:,ityr)-pclim(:,:,ityr))*(dT_g-ind_pre)/(ind_lgm-ind_pre)
+       where(pmon < 0) pmon = 0.
+       pmon    = pmon*exp(-7.5e-4*z_topo)
+       dq_rain = -pmon/(wz_vapor*r_qviwv) ! unit: kg/s
    endif
 
   ! ice sheet : spread and ablation

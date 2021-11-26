@@ -60,8 +60,8 @@ subroutine seaice(Tsurf, ice_H1, SW, LW_surf, LWair_down, Q_lat,  &
 
   do i=1,xdim
      ip = i+1; if (ip > xdim) ip = 1
-     in = i-1; if (ip <    1) ip = xdim
-     do j=2,ydim
+     in = i-1; if (in <    1) in = xdim
+     do j=2,ydim-1
         wz =  1./cos(2.*3.1416/360.*(3.75*j-90.-3.75/2.)) ! zonal weight
         jp = j+1; jn = j-1;
         if (mask(i,j) < 0. .and. ice_H1(i,j) > 0.) then ! sea ice
