@@ -269,7 +269,6 @@ tsurf  1 0 surface temperature
 tatmos 1 0 atmosphere temperature
 tocean 1 0 ocean temperature
 vapor  1 0 water vapor
-mask   1 0 land-sea mask
 albd   1 0 albdo
 precip 1 0 precipitation
 slv    1 0 sea level 
