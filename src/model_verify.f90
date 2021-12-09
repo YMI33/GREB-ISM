@@ -248,7 +248,7 @@ module mo_diagnostics
 
 end module mo_diagnostics
 
-include "greb.ice.sheet.f90"
+include "ice-sheet.f90"
 
 !+++++++++++++++++++++++++++++++++++++++
 !+++++++++++++++++++++++++++++++++++++++

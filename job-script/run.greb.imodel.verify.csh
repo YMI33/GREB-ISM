@@ -7,7 +7,7 @@
 # create work directory if does not already exist
 set NAME = EISMINT
 
-set WDIR=/Users/zxie0012/Documents/ice_sheet_model/model/my_ice_model/ice-sheet-development
+set WDIR=/Users/zxie0012/Documents/GREB-ISM
 set MDIR=$WDIR/src
 set ODIR=$WDIR/experiments/$NAME
 
@@ -23,7 +23,7 @@ set i=1
 set YEARS=200000
 # output time step
 set TIMEOUT=1000
-while($i<6)
+while($i<7)
 
 # settings for scenario
 # log_decouple = 1 -> EISMINT I
