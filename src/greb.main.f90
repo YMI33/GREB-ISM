@@ -439,8 +439,7 @@ program  greb_main
      ityr = mod((it-1),nstep_yr)+1           ! time step in year
      Ts1=Ts0; Ta1=Ta0; q1=q0; To1=To0
      ice_Ts1=ice_Ts0; ice_H1=ice_H0; ice_T1=ice_T0
-     if( mod((it-1),nstep_yr)+1 == nstep_yr .and. (log_exp .ne. 310)) &
-     &   call sealevel(ice_H0, Ts0, To0)
+     if(log_exp .ne. 310) call sealevel(ice_H0, Ts0, To0)
      print*, 'Do restart', year
   end if  
   
