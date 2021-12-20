@@ -156,6 +156,9 @@ subroutine sealevel(ice_h, Ts, To)
   where(mask < 0 .and. b_rock > 0.0 )                    mask =  1 ! change ocean -> land
   where(mask > 0 .and. b_rock < -1.0 .and. ice_h < 0.2 ) mask = -1 ! change land -> ocean
   
+  where(mask > 0.) cap_surf = cap_land
+  where(mask < 0.) cap_surf = cap_ocean*mldclim(:,:,ityr)
+  
 end subroutine sealevel
 
 !+++++++++++++++++++++++++++++++++++++++
