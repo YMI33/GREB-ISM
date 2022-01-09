@@ -723,7 +723,7 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
 
   if(log_ice_cpl == 0) Q_ice = 0.0
 
-  ! equation (28) in XIE2021, surface temperature
+  ! equation (28) in XIE2021, surface temperature, equation (1) for old version
   Ts0  = Ts1  +dT_ocean + dt*( SW +LW_surf -LWair_down +Q_lat +Q_ice +Q_sice +Q_sens   &
 &                              +TF_correct(:,:,ityr)) / cap_surf
 
@@ -734,13 +734,16 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
   where(Ts0 .le. Tmin_limit )     Ts0 = Tmin_limit ! no very low Tsurf;  numerical stability
 
   ! air temperature
+  ! equation (2) in XIE2021, air temperature
   Ta0  = Ta1 +dTa_crcl +dt*( LWair_up +LWair_down -em*LW_surf +Q_lat_air -Q_sens )/cap_air
   where(Ta0 .le. Tmin_limit )     Ta0 = Tmin_limit ! no very low Tatmos;  numerical stability
 
   ! deep ocean temperature
+  ! equation (3) in XIE2021, ocean temperature
   where(mask < 0) To0  = To1 +dTo +ToF_correct(:,:,ityr)
 
   ! air water vapor
+  ! equation (4) in XIE2021, surface humidity
   dq = dt*(dq_eva+dq_rain) +dq_crcl + qF_correct(:,:,ityr)
   where(dq .le. -q1 ) dq = -0.9*q1     ! no negative q;  numerical stability
   where(dq .gt.   0.020 ) dq = 0.020   ! no hugh q;  numerical stability
@@ -748,7 +751,7 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
   q0 = q1 + dq
 
 !  ice height
-!  equation (7)/(30) in XIE2021
+!  equation (7)/(31) in XIE2021
   ice_H0 = ice_H1 +dice_h +dice_mass +dice_hadv
   where (ice_H0 < 0.) ice_H0 = 0.0
   do k = 1,4

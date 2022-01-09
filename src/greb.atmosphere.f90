@@ -43,7 +43,7 @@ subroutine SWradiation(Tsurf, sw, ice_cover, a_surf)
      where(mask > 0. .and. ice_cover > 0. .and. ice_cover < 0.02 ) &
 &       a_surf =  a_no_ice +da_ice*ice_cover/0.02
 
-     ! equation (33) in XIE2021
+     ! equation (34) in XIE2021
      ! Ocean: ice -> albedo/heat capacity linear function of T_surf
      where(mask < 0. .and. ice_cover >= 0.5) a_surf = a_no_ice+da_ice      ! ice
      where(mask < 0. .and. ice_cover  > 0.0 .and. ice_cover < 0.5 ) &
@@ -69,9 +69,8 @@ subroutine senseheat(Ta1,Ts1,Q_sens)
 
 ! declare temporary fields
   real, dimension(xdim,ydim) :: Ts1, Ta1, Q_sens, Ta_scl
-
+  ! equation (36) in XIE2021
   Ta_scl = Ta1 + c_lapse*z_topo
-
   Q_sens = ct_sens*(Ta_scl-Ts1)
 
 end subroutine senseheat
@@ -169,6 +168,7 @@ subroutine hydro(Tsurf, q, Qlat, Qlat_air, dq_eva, dq_rain, ice_H1)
 
 ! precipitation -> Eq. 11 in Stassen et al 2019
 ! Parameters in unused terms are set to zero
+! equation (29) in XIE2021
   dq_rain = (c_q + c_rq*rq + c_omega*omegaclim(:,:,ityr) + c_omegastd*omegastdclim(:,:,ityr))*cq_rain*q    ! unit: kg/s
   where(dq_rain >= -0.0015 / (wz_vapor * r_qviwv * 86400.)) dq_rain = -0.0015 / (wz_vapor * r_qviwv * 86400.) !Avoid negative rainfall (dq_rain is negative means positive rainfall!)
 
@@ -179,7 +179,7 @@ subroutine hydro(Tsurf, q, Qlat, Qlat_air, dq_eva, dq_rain, ice_H1)
   do i=1,7; q_zonal(:,i) = sum(q_zonal(1,i:8))/(8-i+1); end do ! smooth antarctica to s-ocean
   do i=ydim-6,ydim; q_zonal(:,i) = sum(q_zonal(1,ydim-7:i))/(8-(ydim-i)); end do ! smooth n-pole
 
-  ! equation (29) in XIE2021
+  ! equation (30) in XIE2021
   dq_rain = dq_rain + q_zonal*precip_correct(:,:,ityr)
 
 ! latent heat flux atmos

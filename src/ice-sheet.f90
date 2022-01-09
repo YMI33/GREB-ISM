@@ -85,7 +85,7 @@ subroutine ice_sheet(it, ionum, irec, mon, ice_H1, ice_T1, ice_Ts1, Ta1, dT_ocea
   dx = dlon; dy=dlat; dyy=dy*deg
   lat = dlat*ilat-dlat/2.-90.;  dxlat=dx*deg*cos(2.*pi/360.*lat)
 
-  ! equation (34) in XIE2021
+  ! equation (35) in XIE2021
   ice_zs = 0.
   if(log_ice_topo .eq. 1) then
       where(glacier_type >  0) ice_zs = b_rock + ice_H1
@@ -808,7 +808,7 @@ subroutine ice_regression_coef(T1, Tcoef)
    do k1 = 1,4
        sum_var = 0
        do k2 = 1,4
-            sum_var = sum_var + rg_coef(k2,k1)*T1(k2)
+            sum_var = sum_var + rg_coef(k2,k1)*T1(k2) ! equation (6) in XIE2021
        end do
        Tcoef(k1) = sum_var
    end do
