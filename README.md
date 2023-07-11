@@ -22,4 +22,6 @@ Code for Globally Resolved Energy Balance - Ice Sheet Model (GREB-ISM)
 4. run job script
 5. you can access the experiment output in *GREB-ISM/experiment*, which are binary files in [GrADS format](http://cola.gmu.edu/grads/gadoc/aboutgriddeddata.html#structure). You can easily read the data by CTL files in the same directory through GrADS. 
 
-
+## New input files for transition experiment
+1. input/icesheet_input/ts_2myrs_50_250k.dat    global mean temperature from proxy data (50%)   doi: 10.1038/nature19798 
+2. input/CO2/co2_2myrs_250k_Berends.dat         CO2 data                                        doi: 10.5194/cp-17-361-2021
