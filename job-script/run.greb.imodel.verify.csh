@@ -95,6 +95,8 @@ set CO2input=none
 ### compile GREB model (uncomment one of these three options)
 ### gfortran compiler (Linux (e.g. Ubuntu), Unix or MacBook Air)
 gfortran -fopenmp -march=native -O3 -ffast-math -funroll-loops -fdefault-real-8 ${MDIR}/model_verify.f90 -o greb.x
+### ifort compiler (Linux, Unix or MacBook Air), contributed by Dr. Wang Yue 
+# ifort -qopenmp -qopenmp-link=static -O3 -fast -assume byterecl -r8 ${MDIR}/model_verify.f90 -o greb.x
 
 ###################
 # END USER INPUT! #
