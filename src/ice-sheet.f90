@@ -194,7 +194,7 @@ subroutine ice_mass_balance(ice_H1, ice_Ts1, Ta1, dq_rain, Fn_surf, dT_ocean, di
 ! mass balance: ice accumulation and ice fusion
 ! output: ice mass balance (term_mass); ice fusion latent heat (ice_fus)
   USE mo_numerics, ONLY: xdim, ydim, dt
-  USE mo_physics,  ONLY: mask, z_topo, rho_ice, cp_ice, d_ice_max, cap_surf,c_lapse
+  USE mo_physics,  ONLY: mask, z_topo, z_topo0, rho_ice, cp_ice, d_ice_max, cap_surf,c_lapse, log_ice_bmelt 
   implicit none
   real*8, dimension(xdim,ydim) :: ice_Ts1                 ! ice surface temperature (current) [K]
   real*8, dimension(xdim,ydim) :: Fn_surf                 ! surface net heat flux [J/m2]
@@ -204,6 +204,7 @@ subroutine ice_mass_balance(ice_H1, ice_Ts1, Ta1, dq_rain, Fn_surf, dT_ocean, di
   real*8, dimension(xdim,ydim) :: ice_snf                 ! snowfall accumulation rate [m/s]
   real*8, dimension(xdim,ydim) :: ice_melt                ! ice melting rate (negative -> melting) [m/s]
   real,   dimension(xdim,ydim) :: ice_fus                 ! ice melting latent heat [W/m2]
+  real,   dimension(xdim,ydim) :: ice_bmelt               ! ice basal melting latent heat [W/m2]
 
   real,   dimension(xdim,ydim) :: Ta1                     ! air temperature [K]
   real*8, dimension(xdim,ydim) :: Ta_scl                  ! in situ air temperature based on the topography [K]
@@ -220,8 +221,16 @@ subroutine ice_mass_balance(ice_H1, ice_Ts1, Ta1, dq_rain, Fn_surf, dT_ocean, di
   ! ice fusion
   call ice_fusion( ice_fus, ice_melt, ice_Ts1, ice_H1, Fn_surf, dT_ocean) 
   
+  ice_bmelt  = 0.
+  if(log_ice_bmelt .eq. 1) then
+  ! constant basal melt
+    where(z_topo0<0) ice_bmelt = -0.5/365./86400.
+    ice_bmelt(72:77,39:43)     = 0. ! Hudsen Bay
+  end if
+  !!!!!!!!!!!!!!!!!!!
+  
   ! mass balance 
-  where(mask > 0.) term_mass = dt* (ice_snf + ice_melt)
+  where(mask > 0.) term_mass = dt* (ice_snf + ice_melt + ice_bmelt)
   
   ! ice surface temperature
   dice_Ts  = dt*(Fn_surf + ice_fus ) / cap_surf 
@@ -258,10 +267,13 @@ subroutine ice_fusion( ice_fus, ice_melt, ice_Ts1, ice_H1, Fn_surf, dT_ocean)
 ! ice fusion: ice melting latent heat and ice thickness change due to melting
 ! output: ice thickness budget melting (ice_melt), ice fusion latent heat (ice_fus)
   USE mo_numerics, ONLY: xdim, ydim, dt
-  USE mo_physics,  ONLY: ci_latent, cp_ice, Tl_ice2, cap_surf, cap_land,    &
+  USE mo_physics,  ONLY: ci_latent, cp_ice, Tl_ice2, cap_surf, cap_land, log_exp,   &
 &						 rho_ice, d_ice_max, mask, glacier_type, beta_melt, rho_ocean
   implicit none
-  real*8, dimension(xdim,ydim) :: ice_Tse                 ! ice surface temperature estimate [K]
+  real*8, dimension(xdim,ydim) :: ice_Tse                 ! ice surface temperature estimate for melting calculation [K]
+  real*8, dimension(xdim,ydim) :: ice_Tmax                ! ice surface temperature daily maximum estimate [K]
+  real*8, dimension(xdim,ydim) :: ice_Tmin                ! ice surface temperature daily minimum estimate [K]
+  real*8, dimension(xdim,ydim) :: ice_Tcor                ! ice surface temperature with maximum of frozen temperature [K]
   real*8, dimension(xdim,ydim) :: ice_Ts1                 ! ice surface temperature [K]
   real*8, dimension(xdim,ydim) :: ice_H1                  ! ice thickness [m]
   real,   dimension(xdim,ydim) :: dT_ocean                ! ocean temperature change [K]
@@ -270,6 +282,7 @@ subroutine ice_fusion( ice_fus, ice_melt, ice_Ts1, ice_H1, Fn_surf, dT_ocean)
   real*8, dimension(xdim,ydim) :: heat_tsurf              ! heat flux power for heating surface temperature above frozen point [W/m2]
   real*8, dimension(xdim,ydim) :: hmax_melt               ! heat flux power maximum for total snow melts [W/m2] 
   real*8, dimension(xdim,ydim) :: Fn_surf                 ! surface heat flux without fusion [W/m2] 
+  real*8                       :: dailyvar                ! daily temperature variation 
   
   ice_melt  = 0.; ice_fus   = 0.
   heat_tsurf= 0.; hmax_melt = 0.
@@ -278,8 +291,22 @@ subroutine ice_fusion( ice_fus, ice_melt, ice_Ts1, ice_H1, Fn_surf, dT_ocean)
 !  where((ice_H1 <  d_ice_max).and.(ice_H1 > 0.)) cap_ice = ice_H1*cp_ice*rho_ice ! heat capacity of snow [J/K/m^2]
 !  where(ice_H1 >= d_ice_max) cap_ice = d_ice_max*cp_ice*rho_ice ! heat capacity limitation of snow [J/K/m^2]
   
-   ! equation (13) in XIE2021
-   ice_Tse  = ice_Ts1 + dT_ocean + dt*Fn_surf / cap_surf 
+   if ( (log_exp > 320) .and. (log_exp < 330) ) then
+   ! seting for standalone run experiments with proxy index to obtain daily variation 
+   ! and remove fake energy due to data interpolation
+     dailyvar  = 2.;
+     ice_Tcor  = ice_Ts1
+     where(ice_Tcor > Tl_ice2) ice_Tcor  = Tl_ice2
+     ice_Tmax  = ice_Tcor + dailyvar + dT_ocean + dt*Fn_surf / cap_surf 
+     ice_Tmin  = ice_Tcor - dailyvar + dT_ocean + dt*Fn_surf / cap_surf 
+     where(ice_Tmin < Tl_ice2) ice_Tmin = Tl_ice2
+     ice_Tse   = (ice_Tmax+ice_Tmin)/2.
+   else
+     ! equation (13) in XIE2021
+     ice_Tse  = ice_Ts1 + dT_ocean + dt*Fn_surf / cap_surf 
+   end if
+   !!!!!!!!!!!!!!!!!!!!!!!!!
+
    ! equation (11) in XIE2021
    where( mask > 0 .and. ice_H1 > 0.)
        ! equation (12) in XIE2021, the extra heat flux after the ice reaches melting point
