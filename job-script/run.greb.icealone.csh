@@ -51,7 +51,7 @@ set log_ice_slv   = 1  # sea level control
 set log_ice_ant   = 1
 
 # directories
-set WDIR=/Users/zxie0012/Documents/GREB-ISM
+set WDIR=/Users/zhiangxie/Documents/analysis/CAS-ESM/GREB-ISM
 set JDIR=$WDIR/job-script
 set MDIR=$WDIR/src
 set IDIR=$WDIR/input/
@@ -76,6 +76,7 @@ set ATMO  = $MDIR/greb.atmosphere.f90
 
 ### gfortran compiler (Linux (e.g. Ubuntu), Unix or MacBook Air)
 gfortran -fopenmp -march=native -O3 -ffast-math -funroll-loops $MAIN $ATMO $OCEN $ICE -o greb.x
+#gfortran -g -fcheck=all -fopenmp -march=native -O3 -ffast-math -funroll-loops $MAIN $ATMO $OCEN $ICE -o greb.x
 ### ifort compiler (Linux, Unix or MacBook Air), contributed by Dr. Wang Yue 
 # ifort -qopenmp -qopenmp-link=static -O3 -fast -assume byterecl $MAIN $ATMO $OCEN $ICE -o greb.x
 
@@ -107,6 +108,7 @@ set OMCLM=${IDIR}'/erainterim.omega.vertmean.clim.bin'
 set OMSTD=${IDIR}'/erainterim.omega_std.vertmean.clim.bin'
 set BROCK=${IDIR}'/bedmachine.bed.rock.bin'
 set ICCLM=${IDIR}'/ice.height.first-guess.clim730.bin'
+set GLCLM=${IDIR}'/ice.height.first-guess.climDec31.bin'
 set ORBIT=${IDIR}'/orbital.parameters.last5mill.yrs.nocomments.txt'
 set PRECI=${IDIR}'/precip.NCEP-DOE.730clim.gad'
 set LGM_PRECI=${IDIR}'/precip.AWI-ESM_LGM.730clim.gad'
@@ -137,6 +139,7 @@ ln -s $OMCLM omclim
 ln -s $OMSTD omstdv
 ln -s $BROCK bedrock
 ln -s $ICCLM iceclm
+ln -s $GLCLM glcclm
 ln -s $ORBIT orbit
 ln -s $PRECI precip
 ln -s $TS_G delta_ts_Greenland
@@ -171,6 +174,19 @@ if ($TTYR <  1000) set BASE = greb.exp-$EXP.$NAME.00$TTYR
 if ($TTYR <   100) set BASE = greb.exp-$EXP.$NAME.000$TTYR
 if ($TTYR <    10) set BASE = greb.exp-$EXP.$NAME.0000$TTYR
 
+#  glc namelist
+cat >glc_namelist <<EOF
+&NUMERICS
+glc_rstnum   = 701
+glc_nmlnum   = 702
+glc_outnum   = 703
+/
+&PHYSICS
+ log_glc_rst    = 0
+/
+EOF
+rm -f control scenario
+
 #  namelist
 cat >namelist <<EOF
 &NUMERICS
@@ -193,13 +209,12 @@ dt_out      = $DT_OUT
  log_ice_ant =$log_ice_ant  ! antarctica switch
 /
 EOF
-rm -f control scenario
 
 setenv OMP_NUM_THREADS 3
 setenv KMP_AFFINITY verbose,none
 unlimit stacksize
-
 ./greb.x 
+
 
 cat >job.restart.txt <<EOF
  xyr       $xyr
@@ -343,6 +358,7 @@ precip 1 0 precipitation
 slv    1 0 sea level 
 endvars 
 EOF
+
 # ------------ restart loop ----------------
 echo ''
 echo ' restart loop'
@@ -384,9 +400,20 @@ dt_out      = $DT_OUT
  log_ice_ant =$log_ice_ant  ! antarctica switch
 /
 EOF
+
+cat >glc_namelist <<EOF
+&NUMERICS
+glc_rstnum   = 701
+glc_nmlnum   = 702
+glc_outnum   = 703
+/
+&PHYSICS
+ log_glc_rst    = 1
+/
+EOF
 rm -f control scenario
 #date
-./greb.x > greb.out.txt
+./greb.x > greb.out0.txt
 #date
 cat >job.restart.txt <<EOF
  xyr       $xyr
@@ -456,7 +483,5 @@ end
 # ------------ end run loop ----------------
 date
 
-# cd $WDIR
-# qsub ./run.greb.icealone.pictrl.restart.csh
-
-exit
+cd $WDIR
+./run.greb.icealone.restart.csh

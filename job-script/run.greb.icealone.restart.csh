@@ -43,7 +43,7 @@ set log_ice_topo  = 1  # topogragh coupling control
 set log_ice_slv   = 1  # sea level control
 set log_ice_ant   = 1
 # directories
-set WDIR=/scratch/w48/zx2351/ice-sheet-development
+set WDIR=/Users/zhiangxie/Documents/analysis/CAS-ESM/GREB-ISM
 set MDIR=$WDIR
 set IDIR=$WDIR/input/
 set ODIR=./
@@ -162,7 +162,7 @@ EOF
 @ loop ++
 end
 # ------------ end run loop ----------------
-# cd $WDIR
-# if(${xyr}<0) csh ./run.greb.icealone.pictrl.restart.csh
+cd $WDIR/job-script/
+if(${xyr}<0) csh ./run.greb.icealone.restart.csh
 
 exit
