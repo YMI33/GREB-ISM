@@ -68,7 +68,6 @@ module mo_numerics
 
 ! numerical parameter
   integer, parameter :: xdim = 96, ydim = 48          ! field dimensions
-  integer, parameter :: kdim = 4                      ! vertical layers
   integer, parameter :: ndays_yr  = 365               ! number of days per year
   integer, parameter :: dt        = 12*3600           ! time step [s]
   integer, parameter :: dt_crcl   = 0.5*3600          ! time step circulation [s]
@@ -90,9 +89,6 @@ module mo_numerics
   integer            :: ireal     = 4                 ! record length for IO (machine dependent)
 ! 						        ireal = 4 for Mac Book Pro and Ubuntu Linux, 1 is another option
   integer            :: log_restart = 0               ! control restarts
-  integer            :: glc_rstnum  = 701             ! ice sheet model restart file number
-  integer            :: glc_nmlnum  = 702             ! ice sheet namelist file number
-  integer            :: glc_outnum  = 703             ! ice sheet namelist file number
   integer            :: dt_rstrt   = 10               ! restart frequency [yrs calculated]
   integer            :: dt_out     = 1                ! output frequency  [yrs calculated]
 
@@ -128,7 +124,6 @@ module mo_physics
   integer  :: log_ice_topo    = 1              ! process control for ice topograph 
   integer  :: log_ice_slv     = 1              ! process control for sea level effect 
 
-  integer  :: log_glc_rst     = 0              ! process control for ice sheet model restart
 
 ! physical parameter (natural constants)
   parameter( pi        = 3.1416 )
@@ -176,8 +171,7 @@ module mo_physics
   real :: CO2_scn = 0.                             ! CO2 in scenario run
   real :: Todeep0   = 273.15+2.                    ! deep abyssal ocean initial temperature
   ! ice sheet model parameters
-  real   :: c_lapse   = -0.006                     ! air temperature lapse rate in atmosphere [K/m]
-  real*8 :: ice_svlm  = 1./rho_ice                 ! specific volume of ice/snow [m^3/kg]
+  real   :: c_lapse   = -0.006                     ! air temperature lapse rate in atmosphere [K/m]\
   real*8 :: ice_kappa = 2.1                        ! ice sheet diffusion coefficient [W/K/m] 
   real*8 :: beta_melt = 8.7d-4                     ! change of melting point with ice depth [K/m]
   real*8 :: geoh_flux = 4.2d-2                     ! geoheat flux on bottom [W/m^2] 
@@ -211,7 +205,6 @@ module mo_physics
   real*4, dimension(xdim,ydim)          ::  z_topo0      ! surface elevation (input initial data) [m]
   real*4, dimension(xdim,ydim)          ::  b_rock0      ! bed rock height (input initial data) [m]
   real*4, dimension(xdim,ydim)          ::  z_ocean      ! ocean depth [m]
-  real*4, dimension(xdim,ydim)          ::  iceH_clim0   ! reference ice thickness climatology (input initial data) [m]
   real*4, dimension(xdim,ydim,nstep_yr) ::  Tclim, uclim, vclim, omegaclim, omegastdclim, wsclim
   real*4, dimension(xdim,ydim,nstep_yr) ::  qclim, mldclim, Toclim, cldclim, precipclim,iceH_clim    
   real*4, dimension(xdim,ydim,nstep_yr) ::  Tclim_lgm, pclim, pclim_lgm 
@@ -226,6 +219,7 @@ module mo_physics
   real*4, dimension(xdim,ydim)          :: mask            ! land-sea mask (1 for land, -1 for ocean)
   real*8, dimension(xdim,ydim)          :: glacier_type    ! grid type from ice sheet model perspective (1 for grounded, 0 for floating, -1 for ocean)
   real*8, dimension(xdim, ydim)         :: b_rock          ! bed rock height [m]
+  real*4, dimension(xdim,ydim)          ::  iceH_clim0   ! reference ice thickness climatology (input initial data) [m]
   real, dimension(xdim,ydim)            :: cap_surf        ! surface heat capacity [J/K/m^2] 
   real, dimension(xdim, ydim)           :: wz_air          ! topography integration parameter for air mass 
   real, dimension(xdim, ydim)           :: wz_vapor        ! topography integration parameter for water vapor 
@@ -272,26 +266,42 @@ module mo_diagnostics
 end module mo_diagnostics
 
 !+++++++++++++++++++++++++++++++++++++++
+module glc_global_fields
+!+++++++++++++++++++++++++++++++++++++++
+  USE mo_numerics, ONLY: xdim, ydim
+  implicit none
+  integer, parameter                 :: kdim = 4    ! vertical layers
+  real*8, dimension(xdim,ydim)       :: ice_H1      ! ice thickness (current) [m]
+  real*8, dimension(xdim,ydim,kdim)  :: ice_T1      ! ice strata temperature (current) [k]
+  real*8, dimension(xdim,ydim)       :: ice_Ts1     ! ice surface temperature (current) [K]
+  real*8, dimension(xdim,ydim)       :: ice_Tsm     ! ice surface temperature from model [K]
+  real*4, dimension(xdim,ydim)       :: ice_Hm0, term_massmm, term_hadvmm, term_calv ! monthly average variables for output 
+  real*4, dimension(xdim,ydim,4)     :: ice_Tmm, ice_vxm0, ice_vym0
+end module glc_global_fields
+!+++++++++++++++++++++++++++++++++++++++
+
+!+++++++++++++++++++++++++++++++++++++++
 program  greb_main
 !+++++++++++++++++++++++++++++++++++++++
 
   use mo_numerics
   use mo_physics
   use mo_diagnostics
+  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1
 
 ! declare temporary fields
   real, dimension(xdim,ydim)     :: Ts0, Ts1, Ta0, Ta1, To0, To1, q0, q1,       &
 &                                 ts_ini, ta_ini, q_ini, to_ini
-  real*8, dimension(xdim,ydim)   :: ice_Ts1, ice_H1, ice_H0, ice_Ts0, ice_Hini, & 
+  real*8, dimension(xdim,ydim)   :: ice_H0, ice_Ts0, ice_Hini, & 
 &                                 ogrid, ice_Tsini
-  real*8, dimension(xdim,ydim,4) :: ice_T1, ice_T0, ice_Tini
+  real*8, dimension(xdim,ydim,4) :: ice_T0, ice_Tini
   integer year, yrs_calc, year0, dt_out0
  
   real*4, dimension(xdim,ydim)   :: ice_out
   integer                        :: t
   real                           :: CO2 
 
-  call greb_initialization(ice_Ts1,ice_H1,ice_T1)
+  call greb_initialization
   
   ! open output files
   open(101,file='./control.bin',ACCESS='DIRECT',FORM='UNFORMATTED', RECL=ireal*xdim*ydim)
@@ -312,7 +322,7 @@ program  greb_main
   Ta_ini   = Ts_ini - c_lapse*z_topo                      ! initial value atm. temp.
   To_ini   = Toclim(:,:,nstep_yr)                         ! initial value temp. surf
   q_ini    = qclim(:,:,nstep_yr)                          ! initial value atmos water vapor
-   ice_Tsini= Ts_ini                                       ! initial value ice surface temperaturer
+  ice_Tsini= Ts_ini                                       ! initial value ice surface temperaturer
   ice_Hini = iceH_clim(:,:,nstep_yr)                      ! initial value ice sheet thickness
   do it=1,4 
      ice_Tini(:,:,it) = ice_Tsini                         ! initial value ice strata temperaturer
@@ -387,7 +397,11 @@ program  greb_main
    !------------------------------------------------------------
       print*,'% flux correction ', CO2_ctrl
       1001 format (A4,     T8, A10,   T20, A10,    T32, A15,         T50, A12,      T65, A12,     T80, A15) !TB
-      print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+      if(log_exp .eq. 310 .or. log_exp .eq. 311) then
+        print 1001, "YEAR", "N. Can.[K]", "N. Can.[m]", "Siberia [m]", "Tibet [m]", "Greenland[m]", "South Pole [m]" !TB
+      else
+        print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+      endif
       call qflux_correction(CO2_ctrl, Ts_ini, Ta_ini, q_ini, To_ini, ice_Tsini, ice_Hini, ice_Tini)
 
     !  write flux corrections
@@ -400,7 +414,12 @@ program  greb_main
     ! control run
     !------------------------------------------------------------
       print*,'% CONTROL RUN CO2=',CO2_ctrl,'  time=', time_ctrl,'yr'
-      print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+      ! print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+      if(log_exp .eq. 310 .or. log_exp .eq. 311) then
+        print 1001, "YEAR", "N. Can.[K]", "N. Can.[m]", "Siberia [m]", "Tibet [m]", "Greenland[m]", "South Pole [m]" !TB
+      else
+        print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+      endif
       Ts1 = Ts_ini; Ta1 = Ta_ini; To1 = To_ini; q1 = q_ini; ice_Ts1 = Ts1; ice_H1 = ice_Hini  
       do it=1,4 
           ice_T1(:,:,it)=Ts1 
@@ -411,9 +430,9 @@ program  greb_main
          ityr = mod((it-1),nstep_yr)+1           ! time step in year
 
           call time_loop(it, isrec, year, CO2_ctrl, irec, mon, 101, Ts1, Ta1, q1, To1, Ts0,Ta0, q0, To0, &
-    &                   ice_H0, ice_T0, ice_Ts1, ice_H1, ice_T1)
+    &                   ice_H0, ice_T0)
           Ts1=Ts0; Ta1=Ta0; q1=q0; To1=To0; ice_H1=ice_H0
-          ice_H1=ice_H0;ice_T1=ice_T0
+          ice_H1=ice_H0
 
       end do
       dt_out     = 1000 ! output frequency  [yrs calculated] - 1000 years for ctrl runs.
@@ -427,7 +446,12 @@ program  greb_main
   dt_out = dt_out0
 
   print*,'% SCENARIO EXP: ',log_exp,'  time=', time_scnr,'yr'
-  print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+  ! print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+  if(log_exp .eq. 310 .or. log_exp .eq. 311) then
+        print 1001, "YEAR", "N. Can.[K]", "N. Can.[m]", "Siberia [m]", "Tibet [m]", "Greenland[m]", "South Pole [m]" !TB
+      else
+        print 1001, "YEAR", "CO2[ppm]", "SW[W/m^2]", "global mean[C]", "Trop Pac[C]", "Hamburg[C]", "North Pole[C]" !TB
+      endif
   Ts1 = Ts_ini; Ta1 = Ta_ini; q1 = q_ini; To1 = To_ini
 
   year=1.; iyear=1; CO2=CO2_SCN; mon=1; irec=0; Tmm=0.; Tamm=0.; qmm=0.; apmm=0.;
@@ -470,7 +494,7 @@ program  greb_main
 
   ! paper experiment: 1000m topo 
   if (log_exp .eq. 302) b_rock(17:33,35:42) = b_rock(17:33,35:42) +1000.0 ! central asia
-  
+
   do it=it_start, time_scnr*nstep_yr                                              ! main time loop
 
     ityr = mod((it-1),nstep_yr)+1           ! time step in year
@@ -484,9 +508,9 @@ program  greb_main
      if(log_exp == 332) CO2_SCN=189.6219
 
      call time_loop(it,isrec, year, CO2, irec, mon, 102, Ts1, Ta1, q1, To1, Ts0,Ta0, q0, To0, &
-&                   ice_H0, ice_T0, ice_Ts1, ice_H1, ice_T1)
+&                   ice_H0, ice_T0)
      Ts1=Ts0; Ta1=Ta0; q1=q0; To1=To0
-     ice_H1=ice_H0; ice_T1=ice_T0
+     ice_H1=ice_H0
      if (mod(it,nstep_yr) == 0) year     = year     +dtyr_acc
      if (mod(it,nstep_yr) == 0) yrs_calc = yrs_calc +1
      if (mod(it,nstep_yr) == 0) call orbital_forcing(year)
@@ -530,20 +554,19 @@ end program greb_main
 
 
 !+++++++++++++++++++++++++++++++++++++++
-subroutine greb_initialization(ice_Ts1,ice_H1,ice_T1)
+subroutine greb_initialization
 !+++++++++++++++++++++++++++++++++++++++
   ! initialisation of the greb model
 
   USE mo_numerics
   USE mo_physics
   use mo_diagnostics, only: xdum
+  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1
 
   ! declare output fields
   real, dimension(xdim,ydim,ndays_yr) :: Tc1, Ta1, q1, ap1
   real, dimension(xdim,ydim,ndays_yr) :: Tc2, Ta2, q2, ap2
   real, dimension(xdim,ydim)          :: Tas
-  real*8, dimension(xdim,ydim)        :: ice_Ts1, ice_H1
-  real*8, dimension(xdim,ydim,kdim)   :: ice_T1
   integer, dimension(ndays_yr)::  t = (/(i,i=1,ndays_yr)/) ! jday index
 
   100 FORMAT('climate: ',F9.2, 5E12.4)
@@ -596,7 +619,7 @@ print*,'% start climate shell'
    read(21,rec=1)  sw_solar_ctrl
 !+++++++++++++++++++++++++++++ parameter initialization  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    Tas = tclim(:,:,nstep_yr)
-   call glc_init(ice_Ts1,ice_H1,ice_T1,Tas)
+   call glc_init(Tas)
 
    ! fix mismatch between Tsurf and iceH_clim (glaciers)
    do n=1,nstep_yr
@@ -644,22 +667,23 @@ end subroutine
 
 !+++++++++++++++++++++++++++++++++++++++
 subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, Ts0,Ta0, q0, To0, &
-&                   ice_H0, ice_T0, ice_Ts1, ice_H1, ice_T1)
+&                   ice_H0, ice_T0)
 !+++++++++++++++++++++++++++++++++++++++
 ! main time loop
 
   use mo_numerics
   use mo_physics
+  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1
 
   integer year
   real, dimension(xdim,ydim)   :: Ts1, Ta1, q1, To1, Ts0,Ta0, q0, To0, sw,       &
 &                                 ice_cover, Q_sens, Q_lat, Q_lat_air, dq_eva,   &
 &                                 dq_rain, dTa_crcl, dq_crcl, dq, dT_ocean, dTo, &
 &                                 LW_surf, LWair_down, LWair_up, em,             &
-&                                 a_surf, Q_ice, Q_sice, pmon            
-  real*8, dimension(xdim,ydim) :: ice_H0,  Fn_surf, ice_H1, ice_Ts1,    & 
+&                                 a_surf, Q_ice, Q_sice, pmon, precip            
+  real*8, dimension(xdim,ydim) :: ice_H0,  Fn_surf,   & 
 &                                 dice_hadv, dice_mass, term_calv, dice_h
-  real*8, dimension(xdim,ydim,4) :: ice_T1, ice_T0
+  real*8, dimension(xdim,ydim,4) :: ice_T0
   real*8, dimension(xdim,ydim,4) :: ice_vx3    ! ice strata velocity at zonal (x) and meridian (y) direction [m/s]
   real*8, dimension(xdim,ydim,4) :: ice_vy3    ! ice strata velocity at zonal (x) and meridian (y) direction [m/s]
 
@@ -689,8 +713,9 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
   if(log_ice_sheet == 1) then
       ice_Ts1  = Ts1
       Fn_surf  = sw + LW_surf - LWair_down + Q_sens + Q_lat + TF_correct(:,:,ityr)/2.
-      call glc_run(ice_H1,ice_T1,ice_Ts1,Ta1,dT_ocean,Fn_surf,dq_rain, &
-    &              ice_H0,ice_T0,dice_mass,dice_hadv,term_calv,Q_ice)
+      precip   = dq_rain*r_qviwv*wz_vapor
+      call glc_run(Ta1,dT_ocean,Fn_surf,precip, &
+    &              dice_mass,dice_hadv,term_calv,Q_ice)
    
       if(log_ice_ant == 0 ) then
           Q_ice(:,1:20)     = 0.
@@ -738,6 +763,8 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
   ! do k = 1,4
   !     where(ice_H0 <= d_ice_mov .or. (ice_H1 <= d_ice_mov .and. ice_H0 > d_ice_mov)) ice_T0(:,:,k) = Ts0 
   ! end do
+
+
   if(log_ice_ant == 0 ) then
       ice_H0(:,1:20)    = iceH_clim(:,1:20,ityr)
   end if
@@ -747,7 +774,7 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
     
   ! write output
   call output(it, year, ionum, irec, mon, ts0, ta0, to0, q0, dq_rain, &
-                  ice_H0, dice_mass, dice_hadv, term_calv, ice_T0, &
+                  ice_H0, dice_mass, dice_hadv, term_calv, &
                   ice_vx3, ice_vy3, a_surf)
   ! diagnostics: annual means plots
   call diagonstics(it, year, CO2, ts0, ta0, to0, q0, ice_H0, SW, lw_surf, q_lat, q_sens)
@@ -802,30 +829,33 @@ subroutine tendencies(CO2, Ts1, Ta1, To1, q1, ice_h1, SW, LW_surf, Q_lat, Q_sens
 end subroutine tendencies
 
 !+++++++++++++++++++++++++++++++++++++++
- subroutine  qflux_correction(CO2_ctrl, Ts1, Ta1, q1, To1, ice_Ts1, ice_H1, ice_T1)
+ subroutine  qflux_correction(CO2_ctrl, Ts1, Ta1, q1, To1,ice_Tsini, ice_Hini, ice_Tini) 
 !+++++++++++++++++++++++++++++++++++++++
 !  compute flux correction values
 
   USE mo_numerics
   USE mo_physics
+  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1
 
 ! declare temporary fields
   real*4, external             :: gmean
   real, dimension(xdim,ydim)   :: Ts0, Ts1, Ta0, Ta1, To0, To1, q0, q1, sw, ice_cover, &
 &                               Q_sens, Q_lat, Q_lat_air, dq_eva, dq_rain, LW_surf,  &
 &                               LWair_down, LWair_up, em, dTa_crcl, dq_crcl, dTs,    &
-&                               dTa, dq, T_error, dT_ocean, dTo, &
+&                               dTa, dq, T_error, dT_ocean, dTo, precip, &
 &                               Q_ice, a_surf,q_zonal, Q_sice 
-  real*8,dimension(xdim,ydim)  :: Fn_surf, ice_H1, ice_Ts1, dice_mass, dice_hadv,      &
+  real*8,dimension(xdim,ydim)  :: Fn_surf, dice_mass, dice_hadv, ice_Hini, ice_Tsini,  &
 &								term_calv, ice_vxm, ice_vym, ice_H0,   &
 &								dice_h, xx
 
-  real*8,dimension(xdim,ydim,4) :: ice_T1, ice_T0
+  real*8,dimension(xdim,ydim,4) :: ice_T0, ice_Tini
   integer year
   
   1019 format ('qflux: ',I5, 6F8.2, F9.3, F8.3) !TB
 
   year = 0
+  ice_H1   = ice_Hini
+  ice_T1   = ice_Tini
 
 ! time loop
   do it=1, time_flux*ndt_days*ndays_yr
@@ -847,8 +877,9 @@ end subroutine tendencies
      if(log_ice_sheet == 1) then
         ice_Ts1  = Ts1
         Fn_surf  = sw + LW_surf - LWair_down + Q_sens + Q_lat + TF_correct(:,:,ityr)/2.
-        call glc_run(ice_H1,ice_T1,ice_Ts1,Ta1,dT_ocean,Fn_surf,dq_rain, &
-    &              ice_H0,ice_T0,dice_mass,dice_hadv,term_calv,Q_ice)
+        precip   = dq_rain*r_qviwv*wz_vapor
+        call glc_run(Ta1,dT_ocean,Fn_surf,precip, &
+    &                dice_mass,dice_hadv,term_calv,Q_ice)
        !! DD FIX: no dice_mass, dice_hadv for ocean & Tsurf > To_ice2 & ice_H1 == 0
 
         if(log_ice_ant == 0 ) then
@@ -922,9 +953,11 @@ end subroutine tendencies
 
     ! memory
     Ts1=Ts0; Ta1=Ta0; q1=q0;  To1=To0;
-    ice_H1=ice_H0; ice_T1=ice_T0
+    ice_H1=ice_H0 
 
   end do
+  ice_Hini=ice_H1
+  ice_Tini=ice_T1
   1003 format ("On global average a heat flux correction of ", F8.2," W/m^2") !TB
   1004 format ("and a water vapour correction of ", F8.4, " g/kg is applied each time step") !TB
   print 1003, gmean(sum(TF_correct,3)/nstep_yr) !TB
@@ -1016,12 +1049,13 @@ subroutine restart_read(it, year, ts, ta, to, q)
 !+++++++++++++++++++++++++++++++++++++++
 !    read restart file
 
-  USE mo_numerics,     ONLY: xdim, ydim, kdim, nstep_yr, dt_rstrt, ireal, iprec
+  USE mo_numerics,     ONLY: xdim, ydim, nstep_yr, dt_rstrt, ireal, iprec
   USE mo_physics,      ONLY: log_exp, sw_solar, kry_start, TF_correct, qF_correct, ToF_correct &
 &                          , precip_correct, CO2_SCN  
 
   integer year, t
 
+  integer, parameter             :: kdim = 4    ! vertical layers
   real,   dimension(xdim,ydim)   :: Ts, Ta, q, To, ice_Ts4, ice_H4
   real,   dimension(xdim,ydim,kdim) :: ice_T4
   real*8, dimension(xdim,ydim)   :: ice_Ts, ice_H
@@ -1072,7 +1106,7 @@ end subroutine restart_read
 
 !+++++++++++++++++++++++++++++++++++++++
 subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, dq_rain, &
-                      ice_H0, term_mass, term_hadv, term_calv, ice_T0, &
+                      ice_H0, term_mass, term_hadv, term_calv,  &
                       ice_vx3, ice_vy3, a_surf)
 !+++++++++++++++++++++++++++++++++++++++
 ! output variables in model
@@ -1084,13 +1118,14 @@ subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, dq_rain, &
                            , Tmm, Tamm, Tomm, qmm, prmm, albdmn & 
                            , term_massmm, term_mass_ctrl, term_hadvmm, term_hadv_ctrl & 
                            , term_calvmm, term_calv_ctrl, ice_vxm0, ice_vym0, ice_Tmm, ice_Hm0
+  USE glc_global_fields, ONLY: ice_T1
+
   implicit none
   real*4, external              :: gmean
   real,   dimension(xdim,ydim)  :: Ts0, Ta0, To0, q0, dq_rain, dq_eva, dq_crcl
   real,   dimension(xdim,ydim)  :: a_surf 
   real*8, dimension(xdim,ydim)  :: ice_H0, ice_mask 
   real*8, dimension(xdim,ydim)  :: term_hadv, term_mass, term_calv
-  real*8, dimension(xdim,ydim,4):: ice_T0                ! ice strata temperature (current) [k] 
   real*8, dimension(xdim,ydim,4):: ice_vx3, ice_vy3      ! ice strata velocity at zonal (x) and meridian (y) direction [m/s]
   integer, parameter          :: nvar  = 19              ! number of output variable
   integer, parameter          :: ngvar = 7               ! number of output variable
@@ -1103,7 +1138,7 @@ subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, dq_rain, &
   Tmm=Tmm+Ts0; Tamm=Tamm+ta0; Tomm=Tomm+to0; qmm=qmm+q0; 
   albdmn=albdmn+a_surf
   prmm=prmm+dq_rain*(r_qviwv*wz_vapor);          ! kg/m2/s
-  ice_Hm0=ice_H0;ice_Tmm = ice_Tmm+ice_T0 
+  ice_Hm0=ice_H0;ice_Tmm = ice_Tmm+ice_T1 
   term_massmm = term_massmm + term_mass
   term_hadvmm = term_hadvmm + term_hadv
   term_calvmm = term_calvmm + term_calv
