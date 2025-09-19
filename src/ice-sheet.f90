@@ -16,7 +16,7 @@ module glc_numerics
   integer            :: ireal     = 4                 ! record length for IO (machine dependent)
   integer            :: glc_rstnum  = 701             ! ice sheet model restart file number
   integer            :: glc_nmlnum  = 702             ! ice sheet namelist file number
-  integer            :: glc_outnum  = 703             ! ice sheet namelist file number
+  character(len=256) :: glc_fout_name = 'glc_output.nc' ! ice sheet output file name
   
   real, parameter    :: dlon      = 360./xdim         ! linear increment in lon
   real, parameter    :: dlat      = 180./ydim         ! linear increment in lat
@@ -24,6 +24,7 @@ module glc_numerics
   real               :: dt_ice    = ndays_yr*86400    ! time step for ice sheet model [s]
 
   integer            :: log_glc_rst     = 0              ! process control for ice sheet model restart
+  integer            :: glc_fout_count  = 0              ! counter for times of varible writing for ice sheet output file 
 
 end module glc_numerics
 
@@ -85,26 +86,24 @@ end module glc_physics
 subroutine glc_init(Ts)
 !+++++++++++++++++++++++++++++++++++++++
   ! initialisation of the greb model
-  USE glc_numerics, ONLY: xdim, ydim, kdim, ireal, glc_rstnum, glc_outnum, glc_nmlnum, log_glc_rst
+  USE glc_numerics, ONLY: xdim, ydim, kdim, ireal, glc_rstnum, glc_nmlnum, glc_fout_count, log_glc_rst
   USE mo_physics,  ONLY: rho_ice, rho_ocean, iceH_clim0, z_topo0, b_rock0, z_topo, b_rock,  &
                         & mask, glacier_type
-  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1, ice_Tsm
+  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1, ice_Tsm, &
+                        &      ice_Hm0, glacier_typem0, term_massmm, term_hadvmm, term_calvmm, &
+                        &      ice_Tmm, ice_vxm0, ice_vym0
   implicit none  
 
   real*4, dimension(xdim,ydim)   :: Ts
   integer                        :: k
 
-namelist / numerics /glc_rstnum,glc_nmlnum, glc_outnum, log_glc_rst
+namelist / numerics /glc_rstnum,glc_nmlnum, log_glc_rst
 
 !+++++++++++++++++++++++++++++ read input file  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   ! read namelist
   open(glc_nmlnum,file='glc_namelist')
   read(glc_nmlnum,numerics)
   close(glc_nmlnum)
-  
-  ! open output files
-  open(glc_outnum,file='./scenario.bin',ACCESS='DIRECT',FORM='UNFORMATTED', RECL=ireal*xdim*ydim)
-  close(glc_outnum)
 
  ! read climatologies
   open(731,file='ztopo',  	  ACCESS='DIRECT',FORM='UNFORMATTED', RECL=ireal*xdim*ydim)
@@ -160,20 +159,32 @@ namelist / numerics /glc_rstnum,glc_nmlnum, glc_outnum, log_glc_rst
   ! initialise ice surface temperature from model (for annual mean calculation)
   ice_Tsm = 0.
 
+  ! initialize the output variables
+  term_hadvmm=0.; term_massmm=0.; term_calvmm=0.
+  ice_Tmm=0.; ice_Hm0=0.; ice_vxm0=0.; ice_vym0=0.
+  glacier_typem0=0.
+
+  ! initialize the output counter 
+  glc_fout_count = 1
+
 end subroutine glc_init
 
-subroutine glc_run(Ta1,dT_ocean,Fn_surf,precip, term_mass,term_hadv,term_calv,ice_fus)
+subroutine glc_run(Ta1,dT_ocean,Fn_surf,precip, term_mass,term_hadv,term_calv,ice_fus, it, year, mon)
   ! Modules
-  USE glc_numerics, ONLY: xdim, ydim, kdim, nstep_yr, dt_ice
-  USE mo_physics, ONLY: pi, rho_ice, rho_ocean, to_ice2, Tl_ice2,  d_ice_mov, beta_melt, &
+  USE glc_numerics, ONLY: xdim, ydim, kdim, nstep_yr, dt_ice, glc_fout_count
+  USE mo_numerics, ONLY: dt_out, ndt_days, jday_mon
+  USE mo_physics, ONLY: jday, pi, rho_ice, rho_ocean, to_ice2, Tl_ice2,  d_ice_mov, beta_melt, &
                       & b_rock, mask, glacier_type, &
                       & ityr, log_ice_dyn
-  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1,ice_Tsm
+  USE glc_global_fields, ONLY: ice_H1,ice_T1,ice_Ts1,ice_Tsm, &
+                            &  term_massmm, term_hadvmm, term_calvmm, ice_Hm0, glacier_typem0, &
+                            &  ice_Tmm, ice_vxm0, ice_vym0
 
   implicit none
 
   ! Loop counter
-  integer ::i, k ! work variable for count
+  integer :: i, k ! work variable for count
+  integer :: it, year, mon ! year and month for output
   real*8                       :: deg                      ! degree-length conversion [m/deg]
   real*8                       :: dx                       ! degree difference for zonal direction
   real*8                       :: dy                       ! degree difference for meridian direction
@@ -203,6 +214,7 @@ subroutine glc_run(Ta1,dT_ocean,Fn_surf,precip, term_mass,term_hadv,term_calv,ic
   real*8, dimension(xdim,ydim,kdim)   :: term_tadv           ! ice strata temperature tendency due to advection [K]
   real*8, dimension(xdim,ydim,kdim)   :: dice_T              ! ice strata temperature tendency [K]
   real*8, dimension(xdim,ydim) :: ice_zs                  ! ice surface height [m]
+  real                         :: ndm
 
   ! Variables initialized but not used in this specific snippet
   real*8, dimension(xdim,ydim,kdim)   :: term_vadv           ! ice strata temperature tendency due to vertical advection [K]
@@ -250,6 +262,28 @@ end if
   call ice_topography(ice_zs, ice_H1) ! topography parameter change 
    
   call glc_restart_write
+
+
+   ! calculate output variables (double to single precision)
+  term_massmm = term_massmm + term_mass
+  term_hadvmm = term_hadvmm + term_hadv
+  term_calvmm = term_calvmm + term_calv
+  ice_Hm0 = ice_H0; glacier_typem0 = glacier_type 
+  ice_Tmm = ice_Tmm + ice_T0; 
+  ice_vxm0 = ice_vxm0; ice_vym0 = ice_vym0
+  if ( jday == sum(jday_mon(1:mon)) &
+    &  .and. it/float(ndt_days) == nint(it/float(ndt_days)) ) then
+          if( mod(year, dt_out) == 0) then
+              ndm = jday_mon(mon)*ndt_days
+              ice_Tmm = ice_Tmm/ndm
+              call glc_output
+              glc_fout_count = glc_fout_count + 1
+          end if
+          term_hadvmm=0.; term_massmm=0.; term_calvmm=0.
+          ice_Tmm=0.; ice_Hm0=0.; ice_vxm0=0.; ice_vym0=0.
+          ! mon=mon+1; if (mon==13) mon=1 ! already be set in output module in main process
+          if (mon==12) glc_fout_count = 1
+  end if
   
 end subroutine glc_run
 
@@ -1661,57 +1695,224 @@ subroutine glc_restart_write
      
 end subroutine glc_restart_write
 
-!!+++++++++++++++++++++++++++++++++++++++
-!subroutine glc_output(it, year, iunit, irec, mon, &
-!                      ice_H0, term_mass, term_hadv, term_calv, ice_T0, &
-!                      ice_vx3, ice_vy3)
-!!+++++++++++++++++++++++++++++++++++++++
-!! output variables in model
-!  USE mo_numerics,     ONLY: xdim, ydim, jday_mon, ndt_days, time_scnr &
-!                           , time_ctrl, ireal, dt, dt_out 
-!  USE mo_physics,      ONLY: jday, r_qviwv, wz_vapor, iyear, glacier_type, mask, z_topo, ssh
-!  USE glc_global_fields, ONLY: ice_Hm0, term_massmm, term_hadvmm, term_calv, &
-!                             , ice_Tmm, ice_vxm0, ice_vym0
-!  implicit none
-!  real*4, external              :: gmean
-!  real*8, dimension(xdim,ydim)  :: ice_H0, ice_mask 
-!  real*8, dimension(xdim,ydim)  :: term_hadv, term_mass, term_calv
-!  real*8, dimension(xdim,ydim,4):: ice_T0                ! ice strata temperature (current) [k] 
-!  real*8, dimension(xdim,ydim,4):: ice_vx3, ice_vy3      ! ice strata velocity at zonal (x) and meridian (y) direction [m/s]
-!  integer, parameter          :: nvar  = 19              ! number of output variable
-!  integer, parameter          :: ngvar = 7               ! number of output variable
-!  integer                     :: i,it,irec,mon,iyrec     ! work variable for count, controled by subroutine output
-!  integer                     :: ndm                     ! total time for mean calculation
-!  integer                     :: iunit                   ! written file uint
-!  integer                     :: year                    ! date variable year
-!
-!  ! diagnostics: monthly means
-!  ice_Hm0=ice_H0;ice_Tmm = ice_Tmm+ice_T0 
-!  term_massmm = term_massmm + term_mass
-!  term_hadvmm = term_hadvmm + term_hadv
-!  term_calvmm = term_calvmm + term_calv
-!  
-!! scenario output
-!  if ( jday == sum(jday_mon(1:mon)) &
-!      .and. it/float(ndt_days) == nint(it/float(ndt_days)) ) then
-!      if(iunit == 102) then
-!          if( mod(year, dt_out) == 0) then
-!              ndm=jday_mon(mon)*ndt_days
-!              write(iunit,rec=nvar*irec+1)  ice_Hm0
-!              write(iunit,rec=nvar*irec+2) term_massmm
-!              write(iunit,rec=nvar*irec+3) term_hadvmm
-!              write(iunit,rec=nvar*irec+4) term_calvmm
-!              write(iunit,rec=nvar*irec+5) ice_vxm0(:,:,4)
-!              write(iunit,rec=nvar*irec+6) ice_vym0(:,:,4)
-!              do i=1,4
-!                  write(iunit,rec=nvar*irec+i+6) ice_Tmm(:,:,5-i)/ndm
-!              end do
-!              
-!          end if
-!          term_hadvmm=0.; term_massmm=0.; term_calvmm=0.
-!          ice_Tmm=0.; ice_Hm0=0.
-!          mon=mon+1; if (mon==13) mon=1 ! set in outside loop
-!       end if
-!  end if
-!
-!end subroutine glc_output
+!+++++++++++++++++++++++++++++++++++++++
+subroutine glc_output
+!+++++++++++++++++++++++++++++++++++++++
+      USE glc_numerics, ONLY: xdim, ydim, kdim, dlon, dlat, glc_fout_name, glc_fout_count
+      USE glc_global_fields, ONLY: term_massmm, term_hadvmm, term_calvmm, ice_Hm0, glacier_typem0, &
+                            &      ice_Tmm, ice_vxm0, ice_vym0
+      use netcdf
+      implicit none
+
+!     This is the name of the data file we will create.
+      integer :: ncid, retval
+      ! Coordinate arrays
+      real*4, dimension(xdim) :: longitude
+      real*4, dimension(ydim) :: latitude
+      real*4, dimension(kdim) :: sigma_level
+      ! Variables
+      integer, parameter  :: nvar       = 8
+      type :: nc_var_info
+        character(len=20) :: name       = ''
+        character(len=30) :: long_name  = ''
+        character(len=20) :: units      = ''
+        integer           :: dim        = 0
+        integer           :: var_id     = -1
+        real, allocatable :: data_1d(:)
+        real, allocatable :: data_2d(:,:)
+        real, allocatable :: data_3d(:,:,:)
+      end type
+      type(nc_var_info), dimension(nvar)    :: nc_vars
+      type(nc_var_info), dimension(3)       :: cords
+      integer, dimension(3)                 :: cords_dimids
+      integer                               :: time_dimid
+      integer                               :: time_varid
+      integer, dimension(3)                 :: start2d, count2d
+      integer, dimension(4)                 :: start3d, count3d
+
+      real                                  :: time_val(1)
+      integer :: i
+
+      ! save as Netcdf file 
+      ! define coordinate variables
+      cords(1)        = nc_var_info('lon','longitude', 'degrees_east', xdim)
+      cords(2)        = nc_var_info('lat','latitude', 'degrees_north', ydim)
+      cords(3)        = nc_var_info('lev','sigma_level', '1', kdim)
+    
+      nc_vars(1) = nc_var_info('iceh', 'ice thickness', 'm')
+      allocate(nc_vars(1)%data_2d(xdim,ydim)); nc_vars(1)%data_2d = ice_Hm0
+      nc_vars(2) = nc_var_info('glc_mask', 'glacier mask','-1 (ocean)/0 (floating ice)/1 (grounded ice)')
+      allocate(nc_vars(2)%data_2d(xdim,ydim)); nc_vars(2)%data_2d = glacier_typem0
+      nc_vars(3) = nc_var_info('term_mass', 'mass budget of mass balance', 'm (monthly sum)')
+      allocate(nc_vars(3)%data_2d(xdim,ydim)); nc_vars(3)%data_2d = term_massmm
+      nc_vars(4) = nc_var_info('term_hadv', 'mass budget of horizontal adv.', 'm (monthly sum)')
+      allocate(nc_vars(4)%data_2d(xdim,ydim)); nc_vars(4)%data_2d = term_hadvmm
+      nc_vars(5) = nc_var_info('term_calv', 'mass budget of calving', 'm (monthly sum)')
+      allocate(nc_vars(5)%data_2d(xdim,ydim)); nc_vars(5)%data_2d = term_calvmm
+      
+      nc_vars(6) = nc_var_info('iceT', 'ice temperature', 'K')
+      allocate(nc_vars(6)%data_3d(xdim,ydim,kdim)); nc_vars(6)%data_3d = ice_Tmm
+      nc_vars(7) = nc_var_info('vx', 'ice velocity in x-direction', 'm/s')
+      allocate(nc_vars(7)%data_3d(xdim,ydim,kdim)); nc_vars(7)%data_3d = ice_vxm0
+      nc_vars(8) = nc_var_info('vy', 'ice velocity in y-direction', 'm/s')
+      allocate(nc_vars(8)%data_3d(xdim,ydim,kdim)); nc_vars(8)%data_3d = ice_vym0
+      
+      if (glc_fout_count == 1) then
+            ! Create NetCDF file
+            retval = nf90_create(trim(glc_fout_name), NF90_CLOBBER, ncid)
+            if (retval /= NF90_NOERR) call handle_err(retval) 
+
+            ! Define dimensions
+            do i = 1, 3
+                retval = nf90_def_dim(ncid, trim(cords(i)%name), cords(i)%dim, cords_dimids(i))
+                if (retval /= NF90_NOERR) call handle_err(retval)
+            end do
+            ! time dimension
+            retval = nf90_def_dim(ncid, 'time', NF90_UNLIMITED, time_dimid)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+
+            ! Define coordinate variables
+            do i = 1,3
+                retval = nf90_def_var(ncid, trim(cords(i)%name), NF90_FLOAT, cords_dimids(i), cords(i)%var_id)
+                if (retval /= NF90_NOERR) call handle_err(retval)
+                retval = nf90_put_att(ncid, cords(i)%var_id, 'long_name', trim(cords(i)%long_name))
+                if (retval /= NF90_NOERR) call handle_err(retval)
+                retval = nf90_put_att(ncid, cords(i)%var_id, 'units', trim(cords(i)%units))
+                if (retval /= NF90_NOERR) call handle_err(retval)
+            end do
+
+            ! define time variable
+            retval = nf90_def_var(ncid, 'time', NF90_FLOAT, (/time_dimid/), time_varid)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+            retval = nf90_put_att(ncid, time_varid, 'long_name','time')
+            if (retval /= NF90_NOERR) call handle_err(retval)
+            retval = nf90_put_att(ncid, time_varid, 'units', 'months since 2001-01-01 00:00:00')
+            if (retval /= NF90_NOERR) call handle_err(retval)
+
+        ! Define 2D and 3D data variables using unified loop
+            do i = 1, nvar
+                ! Determine dimensions based on variable index
+                if (allocated(nc_vars(i)%data_2d)) then
+                    ! 2D variables
+                    retval = nf90_def_var(ncid, trim(nc_vars(i)%name), NF90_FLOAT,         &
+                    & (/cords_dimids(1), cords_dimids(2), time_dimid/),                  &
+                    &  nc_vars(i)%var_id)
+                else if (allocated(nc_vars(i)%data_3d)) then
+                    ! 3D variables
+                    retval = nf90_def_var(ncid, trim(nc_vars(i)%name), NF90_FLOAT,         &
+                    & (/cords_dimids(1), cords_dimids(2), cords_dimids(3), time_dimid/), &
+                    &  nc_vars(i)%var_id)
+                else
+                    write(*,*) 'variable ', nc_vars(i)%name, ' not allocated'
+                endif
+                if (retval /= NF90_NOERR) call handle_err(retval)
+                
+                ! Set units attribute
+                retval = nf90_put_att(ncid, nc_vars(i)%var_id, 'units', trim(nc_vars(i)%units))
+                if (retval /= NF90_NOERR) call handle_err(retval)
+                
+                ! Set long_name attribute
+                retval = nf90_put_att(ncid, nc_vars(i)%var_id, 'long_name', trim(nc_vars(i)%long_name))
+                if (retval /= NF90_NOERR) call handle_err(retval)
+            end do
+            
+            ! End define mode
+            retval = nf90_enddef(ncid)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+
+            ! Initialize coordinate arrays
+            do i = 1, xdim
+                longitude(i) = (i-1) * dlon
+            end do
+            do i = 1, ydim
+                latitude(i) = -90.0 + dlat/2. + (i-1) * dlat
+            end do   
+            do i = 1, kdim
+                sigma_level(i) = 2*(real(i-1)-2.) /kdim ! -1 to 1
+            end do
+
+            ! define coordinate variables
+            allocate(cords(1)%data_1d(xdim)); cords(1)%data_1d = longitude
+            allocate(cords(2)%data_1d(ydim)); cords(2)%data_1d = latitude
+            allocate(cords(3)%data_1d(kdim)); cords(3)%data_1d = sigma_level
+            
+            ! Write coordinate variables
+            do i = 1, 3
+                retval = nf90_put_var(ncid, cords(i)%var_id, cords(i)%data_1d)
+                if (retval /= NF90_NOERR) call handle_err(retval)
+            end do
+        else
+            ! Open NetCDF file for writing
+            retval = nf90_open(trim(glc_fout_name), NF90_WRITE, ncid)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+
+            ! inquiry coordinate variable id
+            do i = 1,3
+                retval = nf90_inq_dimid(ncid, trim(cords(i)%name), cords_dimids(i))
+                if (retval /= NF90_NOERR) call handle_err(retval)
+            end do
+
+            ! inquiry time variable id
+            retval = nf90_inq_dimid(ncid, 'time', time_dimid)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+            retval = nf90_inq_varid(ncid, 'time', time_varid)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+
+            ! inquiry physical variables id
+            do i = 1,nvar
+                retval = nf90_inq_varid(ncid, trim(nc_vars(i)%name), nc_vars(i)%var_id)
+                if (retval /= NF90_NOERR) call handle_err(retval)
+            end do
+
+        end if
+
+      ! Write time variable
+      time_val = (/real(glc_fout_count)/)
+      retval   = nf90_put_var(ncid, time_varid, time_val, start=(/glc_fout_count/), count=(/1/))
+
+      start2d  = (/1, 1, glc_fout_count/); count2d = (/xdim, ydim, 1/)
+      start3d  = (/1, 1, 1, glc_fout_count/); count3d = (/xdim, ydim, kdim, 1/)
+
+      ! Write 2D/3D data variables
+      do i = 1, nvar
+         if (allocated(nc_vars(i)%data_2d)) then
+            retval = nf90_put_var(ncid, nc_vars(i)%var_id, nc_vars(i)%data_2d,  &
+                                & start=start2d, count=count2d)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+         else if (allocated(nc_vars(i)%data_3d)) then
+            retval = nf90_put_var(ncid, nc_vars(i)%var_id, nc_vars(i)%data_3d,  &
+                                & start=start3d, count=count3d)
+            if (retval /= NF90_NOERR) call handle_err(retval)
+         else
+            write(*,*) 'variable ', nc_vars(i)%name, ' not allocated'
+         end if
+      end do
+      
+      ! Deallocate coordinate arrays
+      do i = 1, 3
+         if (allocated(cords(i)%data_1d)) deallocate(cords(i)%data_1d)
+      end do
+      
+      ! Deallocate variable arrays
+      do i = 1, nvar
+         if (allocated(nc_vars(i)%data_2d)) deallocate(nc_vars(i)%data_2d)
+         if (allocated(nc_vars(i)%data_3d)) deallocate(nc_vars(i)%data_3d)
+      end do
+      
+      ! Close the file
+      retval = nf90_close(ncid)
+      if (retval /= NF90_NOERR) call handle_err(retval)
+      end subroutine glc_output
+
+!+++++++++++++++++++++++++++++++++++++++
+subroutine handle_err(errcode)
+!+++++++++++++++++++++++++++++++++++++++
+      use netcdf
+      implicit none
+      integer, intent(in) :: errcode
+      
+      if (errcode /= NF90_NOERR) then
+         print *, 'NetCDF Error: ', nf90_strerror(errcode)
+         stop 2
+      end if
+end subroutine handle_err

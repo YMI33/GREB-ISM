@@ -275,7 +275,8 @@ module glc_global_fields
   real*8, dimension(xdim,ydim,kdim)  :: ice_T1      ! ice strata temperature (current) [k]
   real*8, dimension(xdim,ydim)       :: ice_Ts1     ! ice surface temperature (current) [K]
   real*8, dimension(xdim,ydim)       :: ice_Tsm     ! ice surface temperature from model [K]
-  real*4, dimension(xdim,ydim)       :: ice_Hm0, term_massmm, term_hadvmm, term_calv ! monthly average variables for output 
+  real*4, dimension(xdim,ydim)       :: term_massmm, term_hadvmm, term_calvmm ! monthly accumulation variables for output 
+  real*4, dimension(xdim,ydim)       :: ice_Hm0, glacier_typem0 ! state variables for output 
   real*4, dimension(xdim,ydim,4)     :: ice_Tmm, ice_vxm0, ice_vym0
 end module glc_global_fields
 !+++++++++++++++++++++++++++++++++++++++
@@ -715,7 +716,7 @@ subroutine time_loop(it, isrec, year, CO2, irec, mon, ionum, Ts1, Ta1, q1, To1, 
       Fn_surf  = sw + LW_surf - LWair_down + Q_sens + Q_lat + TF_correct(:,:,ityr)/2.
       precip   = dq_rain*r_qviwv*wz_vapor
       call glc_run(Ta1,dT_ocean,Fn_surf,precip, &
-    &              dice_mass,dice_hadv,term_calv,Q_ice)
+    &              dice_mass,dice_hadv,term_calv,Q_ice, it, year, mon)
    
       if(log_ice_ant == 0 ) then
           Q_ice(:,1:20)     = 0.
@@ -879,7 +880,8 @@ end subroutine tendencies
         Fn_surf  = sw + LW_surf - LWair_down + Q_sens + Q_lat + TF_correct(:,:,ityr)/2.
         precip   = dq_rain*r_qviwv*wz_vapor
         call glc_run(Ta1,dT_ocean,Fn_surf,precip, &
-    &                dice_mass,dice_hadv,term_calv,Q_ice)
+    &                dice_mass,dice_hadv,term_calv,Q_ice, it, year, mon)
+
        !! DD FIX: no dice_mass, dice_hadv for ocean & Tsurf > To_ice2 & ice_H1 == 0
 
         if(log_ice_ant == 0 ) then
@@ -1199,7 +1201,7 @@ subroutine output(it, year, iunit, irec, mon, ts0, ta0, to0, q0, dq_rain, &
               write(iunit,rec=nvar*irec+14) ice_vxm0(:,:,4)
               write(iunit,rec=nvar*irec+15) ice_vym0(:,:,4)
               do i=1,4
-                  write(iunit,rec=nvar*irec+i+15) ice_Tmm(:,:,5-i)/ndm
+                  write(iunit,rec=i+15) ice_Tmm(:,:,5-i)/ndm
               end do
               
               ! time series output

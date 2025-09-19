@@ -13,7 +13,7 @@ set COMPILE  = 1
 set EXP        = 310 # ice sheet standalone run 
 
 # name of experiment
-set NAME       = benchmark_pictrl
+set NAME       = benchmark_test
 # set NAME = benchmark_tran
 
 # exp start time of orbital forcing [kyrs before today]
@@ -74,8 +74,12 @@ set OCEN  = $MDIR/greb.ocean.f90
 set ATMO  = $MDIR/greb.atmosphere.f90
 \rm -f greb.x *.mod
 
+
+set nf_flags = "-I/opt/homebrew/include"
+set nf_libs  = "-L/opt/homebrew/lib -lnetcdff -lnetcdf"
 ### gfortran compiler (Linux (e.g. Ubuntu), Unix or MacBook Air)
-gfortran -fopenmp -march=native -O3 -ffast-math -funroll-loops $MAIN $ATMO $OCEN $ICE -o greb.x
+gfortran -fopenmp -march=native -O3 -ffast-math -funroll-loops $nf_flags $MAIN $ATMO $OCEN $ICE -o greb.x $nf_libs
+#gfortran -fopenmp -march=native -O3 -ffast-math -funroll-loops $MAIN $ATMO $OCEN $ICE -o greb.x 
 #gfortran -g -fcheck=all -fopenmp -march=native -O3 -ffast-math -funroll-loops $MAIN $ATMO $OCEN $ICE -o greb.x
 ### ifort compiler (Linux, Unix or MacBook Air), contributed by Dr. Wang Yue 
 # ifort -qopenmp -qopenmp-link=static -O3 -fast -assume byterecl $MAIN $ATMO $OCEN $ICE -o greb.x
@@ -179,10 +183,9 @@ cat >glc_namelist <<EOF
 &NUMERICS
 glc_rstnum   = 701
 glc_nmlnum   = 702
-glc_outnum   = 703
+log_glc_rst    = 0
 /
 &PHYSICS
- log_glc_rst    = 0
 /
 EOF
 rm -f control scenario
@@ -226,6 +229,7 @@ cp namelist     ../greb.exp-${EXP}.${NAME}.namelist.txt
 mv scenario.bin     ../${BASE}.scenario.bin
 mv control.bin      ../${BASE}.control.bin
 mv scenario.gmean.bin ../${BASE}.scenario.gmean.bin
+mv glc_output.nc ../${BASE}.glc_output.nc
 cp restart.txt restart_in.txt
 cp restart.bin restart_in.bin
 mv restart.txt  ../restarts/${BASE}.restart.txt
@@ -307,7 +311,7 @@ slv    1 0 sea level
 endvars 
 EOF
 
-@ xyr = $xyr +  $TDIM_RUN * $DTACC / 1000 
+@ xyr = $xyr +  $TDIM_RUN * $DTACC / 1000
 
 # overall ctl file
 
@@ -405,10 +409,9 @@ cat >glc_namelist <<EOF
 &NUMERICS
 glc_rstnum   = 701
 glc_nmlnum   = 702
-glc_outnum   = 703
+ log_glc_rst    = 1
 /
 &PHYSICS
- log_glc_rst    = 1
 /
 EOF
 rm -f control scenario
@@ -423,6 +426,7 @@ cat >job.restart.txt <<EOF
 EOF
 mv scenario.bin     ../${BASE}.scenario.bin
 mv scenario.gmean.bin ../${BASE}.scenario.gmean.bin
+mv glc_output.nc ../${BASE}.glc_output.nc
 cp restart.txt restart_in.txt
 cp restart.bin restart_in.bin
 mv restart.txt  ../restarts/${BASE}.restart.txt
@@ -476,7 +480,7 @@ slv    1 0 sea level
 endvars 
 EOF
 #
-@ xyr = $xyr +  $TDIM_RUN * $DTACC / 1000 
+@ xyr = $xyr +  $TDIM_RUN * $DTACC / 1000
 
 @ loop ++
 end
